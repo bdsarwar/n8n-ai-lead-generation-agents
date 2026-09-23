@@ -1,0 +1,830 @@
+{
+  "name": "Agent 1.5 — Site Verification",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## 1. Trigger & Load Leads to Verify\nRuns daily or manually. Pulls every lead Agent 1 found that\nhasn't been verified yet.",
+        "height": 480,
+        "width": 1860,
+        "color": 4
+      },
+      "id": "sticky-1-trigger-&-load-leads-to-verify",
+      "name": "1. Trigger & Load Leads to Verify",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -50,
+        -110
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 2. Loop Through Each Lead\nProcesses leads one at a time so a single slow/broken site\ncan't stall the whole batch.",
+        "height": 260,
+        "width": 720,
+        "color": 5
+      },
+      "id": "sticky-2-loop-through-each-lead",
+      "name": "2. Loop Through Each Lead",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1850,
+        -110
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 3. Verify WordPress + Find Contact Info\nReal HTTP requests, zero AI. Confirms WordPress and scrapes any\nvisible email/phone from the homepage or contact page.",
+        "height": 480,
+        "width": 2240,
+        "color": 6
+      },
+      "id": "sticky-3-verify-wordpress-+-find-contact-info",
+      "name": "3. Verify WordPress + Find Contact Info",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2610,
+        -110
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 4. Confirm PDFs Exist\nRuns a ?s=pdf site search to confirm the site actually has\nindexable PDFs — the qualifying signal.",
+        "height": 260,
+        "width": 720,
+        "color": 3
+      },
+      "id": "sticky-4-confirm-pdfs-exist",
+      "name": "4. Confirm PDFs Exist",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        4890,
+        -110
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 5. Save Result & Report\nWrites the verdict back to Notion and posts the run summary.",
+        "height": 480,
+        "width": 720,
+        "color": 7
+      },
+      "id": "sticky-5-save-result-&-report",
+      "name": "5. Save Result & Report",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        5650,
+        -110
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 18
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        0,
+        0
+      ],
+      "id": "5a04a3db-3e32-4134-8c43-523deb8db34b",
+      "name": "Daily Schedule - 6PM (Dhaka)"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        220
+      ],
+      "id": "39c68700-3fbc-4208-bf85-669129026ba8",
+      "name": "Manual Trigger"
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "operation": "getAll",
+        "databaseId": {
+          "__rl": true,
+          "value": "YOUR_NOTION_DATABASE_ID",
+          "mode": "id"
+        },
+        "returnAll": true,
+        "simple": false,
+        "filterType": "manual",
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "key": "Status|select",
+              "condition": "equals",
+              "selectValue": "Identified"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2.2,
+      "position": [
+        380,
+        0
+      ],
+      "id": "9095b40b-3de3-412a-ad1d-fc683aa9c028",
+      "name": "Read Identified Leads",
+      "credentials": {
+        "notionApi": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Notion account-CBL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\nif (!items || items.length === 0) {\n  return [{ json: { noLeads: true, total: 0 } }];\n}\n\nconst leads = items.map(item => {\n  const props = item.json.properties || {};\n\n  const getTitle = (prop) => {\n    if (!prop || !prop.title || prop.title.length === 0) return '';\n    return prop.title.map(t => t.plain_text).join('');\n  };\n\n  const getSelect = (prop) => {\n    if (!prop || !prop.select) return '';\n    return prop.select.name || '';\n  };\n\n  const getRichText = (prop) => {\n    if (!prop || !prop.rich_text || prop.rich_text.length === 0) return '';\n    return prop.rich_text.map(t => t.plain_text).join('');\n  };\n\n  const websiteUrl = getTitle(props['Website URL']);\n  const normalizedUrl = websiteUrl.endsWith('/') ? websiteUrl : websiteUrl + '/';\n\n  return {\n    pageId: item.json.id,\n    website_url: normalizedUrl,\n    icp: getSelect(props['ICP']),\n    source: getSelect(props['Source']),\n    notes: getRichText(props['Notes'])\n  };\n}).filter(lead => lead.website_url);\n\nif (leads.length === 0) {\n  return [{ json: { noLeads: true, total: 0 } }];\n}\n\nreturn [{ json: { noLeads: false, leads, total: leads.length } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        760,
+        0
+      ],
+      "id": "8417aad5-24b6-41a5-8ee1-fc13182e3edd",
+      "name": "Prepare Leads List"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "no-leads-check",
+              "leftValue": "={{ $json.noLeads }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1140,
+        0
+      ],
+      "id": "609636bd-fb64-47d9-a68a-e2340057ae73",
+      "name": "Any Leads to Verify?"
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "leads",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        1900,
+        0
+      ],
+      "id": "256f86ed-a9bc-4b49-9246-b392281da409",
+      "name": "Split Leads"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        2280,
+        0
+      ],
+      "id": "a688c37d-2043-4548-9dcb-c17c7082fdc9",
+      "name": "Loop One by One"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.website_url }}",
+        "options": {
+          "redirect": {
+            "redirect": {
+              "maxRedirects": 3
+            }
+          },
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          },
+          "timeout": 10000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2660,
+        0
+      ],
+      "id": "ee17c1f3-ffc2-40ba-b7ea-4af0393f45b4",
+      "name": "Fetch Homepage",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const httpResult = $input.first();\nconst loopItem = $('Loop One by One').first().json;\nconst websiteUrl = loopItem.website_url;\n\n// Helper — extract emails from HTML\nfunction extractEmails(html) {\n  const emailRegex = /[a-zA-Z0-9._%+\\-]+@[a-zA-Z0-9.\\-]+\\.[a-zA-Z]{2,}/g;\n  const found = html.match(emailRegex) || [];\n  const filtered = [...new Set(found)].filter(e =>\n    !e.includes('sentry') &&\n    !e.includes('example') &&\n    !e.includes('wordpress') &&\n    !e.includes('woocommerce') &&\n    !e.includes('schemas') &&\n    !e.includes('purl.org') &&\n    !e.includes('w3.org') &&\n    !e.includes('.png') &&\n    !e.includes('.jpg') &&\n    !e.includes('.gif') &&\n    !e.includes('.svg') &&\n    !e.includes('domain') &&\n    !e.includes('localhost')\n  );\n  return filtered.slice(0, 5);\n}\n\n// Helper — extract phone numbers from HTML\nfunction extractPhones(html) {\n  const phoneRegex = /(?:\\+?\\d{1,3}[\\s\\-.]?)?(?:\\(?\\d{2,4}\\)?[\\s\\-.]?)?\\d{3,4}[\\s\\-.]?\\d{3,4}(?:[\\s\\-.]?\\d{2,4})?/g;\n  const found = html.match(phoneRegex) || [];\n  const filtered = [...new Set(found)]\n    .map(p => p.trim())\n    .filter(p => p.replace(/\\D/g, '').length >= 7 && p.replace(/\\D/g, '').length <= 15)\n    .filter(p => !/^\\d+$/.test(p));\n  return filtered.slice(0, 3);\n}\n\n// Check if HTTP request failed\nif (httpResult.json.error || !httpResult.json) {\n  return [{\n    json: {\n      pageId: loopItem.pageId,\n      website_url: websiteUrl,\n      is_wordpress: false,\n      site_reachable: false,\n      pdf_search_url: null,\n      homepage_emails: [],\n      homepage_phones: [],\n      contact_page_url: null\n    }\n  }];\n}\n\nconst html = (typeof httpResult.json === 'string' ? httpResult.json : JSON.stringify(httpResult.json)).toLowerCase();\n\n// Check WordPress signals\nconst isWordPress = html.includes('wp-content') ||\n                   html.includes('wp-includes') ||\n                   html.includes('wordpress') ||\n                   html.includes('xmlrpc.php') ||\n                   html.includes('wp-json');\n\n// Extract emails and phones from homepage\nconst homepageEmails = extractEmails(html);\nconst homepagePhones = extractPhones(html);\n\n// Build URLs\nconst pdfSearchUrl = websiteUrl + '?s=pdf';\n\n// Find contact page URL from homepage links\nconst contactPatterns = [\n  'contact-us', 'contact/', '/contact\"', \n  'about-us', 'about/', '/about\"',\n  'get-in-touch', 'reach-us', 'reach-out'\n];\n\nlet contactPageUrl = null;\n\n// Extract href links from homepage HTML\nconst hrefRegex = /href=[\"']([^\"']*(?:contact|about|reach|touch)[^\"']*)['\"]/gi;\nconst hrefMatches = [...html.matchAll(hrefRegex)];\n\nif (hrefMatches.length > 0) {\n  let href = hrefMatches[0][1];\n  // Handle relative URLs\n  if (href.startsWith('/')) {\n    contactPageUrl = websiteUrl.replace(/\\/$/, '') + href;\n  } else if (href.startsWith('http')) {\n    contactPageUrl = href;\n  } else {\n    contactPageUrl = websiteUrl + href;\n  }\n} else {\n  // Fallback to /contact/\n  contactPageUrl = websiteUrl + 'contact/';\n}\n\nreturn [{\n  json: {\n    pageId: loopItem.pageId,\n    website_url: websiteUrl,\n    icp: loopItem.icp,\n    is_wordpress: isWordPress,\n    site_reachable: true,\n    pdf_search_url: pdfSearchUrl,\n    homepage_emails: homepageEmails,\n    homepage_phones: homepagePhones,\n    contact_page_url: contactPageUrl,\n    email_found_on_homepage: homepageEmails.length > 0\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3040,
+        0
+      ],
+      "id": "2be97efc-d8c0-4af1-8ee2-5e61a664fa9a",
+      "name": "Check WordPress"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "wp-check",
+              "leftValue": "={{ $json.is_wordpress }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        3420,
+        0
+      ],
+      "id": "5ad71917-2bbe-41ac-9283-d2bd72c8eb13",
+      "name": "Is WordPress?"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "email-found-check",
+              "leftValue": "={{ $json.email_found_on_homepage }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        3800,
+        0
+      ],
+      "id": "223312dd-82b2-41f1-929b-e754a529fedd",
+      "name": "Email Found on Homepage?"
+    },
+    {
+      "parameters": {
+        "url": "={{ $('Check WordPress').first().json.contact_page_url }}",
+        "options": {
+          "redirect": {
+            "redirect": {
+              "maxRedirects": 3
+            }
+          },
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          },
+          "timeout": 10000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        4180,
+        0
+      ],
+      "id": "6cd5c239-fe82-4ba6-ba46-c4e03b57af90",
+      "name": "Fetch Contact Page",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const contactResult = $input.first();\nconst wpData = $('Check WordPress').first().json;\n\nfunction extractEmails(html) {\n  const emailRegex = /[a-zA-Z0-9._%+\\-]+@[a-zA-Z0-9.\\-]+\\.[a-zA-Z]{2,}/g;\n  const found = html.match(emailRegex) || [];\n  const filtered = [...new Set(found)].filter(e =>\n    !e.includes('sentry') &&\n    !e.includes('example') &&\n    !e.includes('wordpress') &&\n    !e.includes('woocommerce') &&\n    !e.includes('schemas') &&\n    !e.includes('purl.org') &&\n    !e.includes('w3.org') &&\n    !e.includes('.png') &&\n    !e.includes('.jpg') &&\n    !e.includes('.gif') &&\n    !e.includes('.svg') &&\n    !e.includes('domain') &&\n    !e.includes('localhost')\n  );\n  return filtered.slice(0, 5);\n}\n\nfunction extractPhones(html) {\n  const phoneRegex = /(?:\\+?\\d{1,3}[\\s\\-.]?)?(?:\\(?\\d{2,4}\\)?[\\s\\-.]?)?\\d{3,4}[\\s\\-.]?\\d{3,4}(?:[\\s\\-.]?\\d{2,4})?/g;\n  const found = html.match(phoneRegex) || [];\n  const filtered = [...new Set(found)]\n    .map(p => p.trim())\n    .filter(p => p.replace(/\\D/g, '').length >= 7 && p.replace(/\\D/g, '').length <= 15)\n    .filter(p => !/^\\d+$/.test(p));\n  return filtered.slice(0, 3);\n}\n\nlet contactEmails = [];\nlet contactPhones = [];\n\nif (contactResult.json && !contactResult.json.error) {\n  const html = (typeof contactResult.json === 'string' ? contactResult.json : JSON.stringify(contactResult.json)).toLowerCase();\n  contactEmails = extractEmails(html);\n  contactPhones = extractPhones(html);\n}\n\n// Merge with homepage emails/phones — deduplicate\nconst allEmails = [...new Set([...wpData.homepage_emails, ...contactEmails])];\nconst allPhones = [...new Set([...wpData.homepage_phones, ...contactPhones])];\n\nreturn [{\n  json: {\n    pageId: wpData.pageId,\n    website_url: wpData.website_url,\n    icp: wpData.icp,\n    is_wordpress: wpData.is_wordpress,\n    pdf_search_url: wpData.pdf_search_url,\n    all_emails: allEmails,\n    all_phones: allPhones\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4560,
+        0
+      ],
+      "id": "39adcbde-cde5-489a-ac3e-41e784b4afc3",
+      "name": "Merge Contact Data"
+    },
+    {
+      "parameters": {
+        "jsCode": "const wpData = $('Check WordPress').first().json;\n\n// Email already found on homepage — pass through directly\nreturn [{\n  json: {\n    pageId: wpData.pageId,\n    website_url: wpData.website_url,\n    icp: wpData.icp,\n    is_wordpress: wpData.is_wordpress,\n    pdf_search_url: wpData.pdf_search_url,\n    all_emails: wpData.homepage_emails,\n    all_phones: wpData.homepage_phones\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4180,
+        220
+      ],
+      "id": "4d7cb5af-b9cf-47b6-8d83-97b12d644bca",
+      "name": "Use Homepage Email"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.pdf_search_url }}",
+        "options": {
+          "redirect": {
+            "redirect": {
+              "maxRedirects": 3
+            }
+          },
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          },
+          "timeout": 10000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        4940,
+        0
+      ],
+      "id": "f8419ae0-323f-4ae8-9e69-ecb5c5f6edcf",
+      "name": "Fetch PDF Search Page",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const httpResult = $input.first();\nconst mergedData = $input.first().json;\n\n// Get contact data from whichever branch ran\nlet contactData;\ntry {\n  contactData = $('Merge Contact Data').first().json;\n} catch(e) {\n  try {\n    contactData = $('Use Homepage Email').first().json;\n  } catch(e2) {\n    contactData = { all_emails: [], all_phones: [], pdf_search_url: null };\n  }\n}\n\nconst pageId = contactData.pageId;\nconst websiteUrl = contactData.website_url;\n\nlet status;\nlet hasPdfs = false;\nlet hasScannedPdfs = 'Unknown';\nlet hasPrivateDocs = 'Unknown';\nlet agentNote = '';\n\n// WordPress not confirmed — should not reach here but handle anyway\nif (!contactData.is_wordpress) {\n  return [{\n    json: {\n      pageId,\n      website_url: websiteUrl,\n      status: 'Rejected',\n      has_pdfs: 'No',\n      has_scanned_pdfs: 'Unknown',\n      has_private_docs: 'Unknown',\n      website_email: '',\n      website_phone: '',\n      agent_note: 'WordPress not confirmed'\n    }\n  }];\n}\n\n// Check PDF search results\nconst searchHtml = (typeof httpResult.json === 'string'\n  ? httpResult.json\n  : JSON.stringify(httpResult.json || '')).toLowerCase();\n\n// Strict PDF detection\nhasPdfs = searchHtml.includes('.pdf');\n\n// Scanned PDF signals\nconst hasScannedSignals = searchHtml.includes('scanned') ||\n                          searchHtml.includes('2010') ||\n                          searchHtml.includes('2011') ||\n                          searchHtml.includes('2012') ||\n                          searchHtml.includes('2013') ||\n                          searchHtml.includes('2014') ||\n                          searchHtml.includes('2015');\n\n// Private/member doc signals\nconst hasPrivateSignals = searchHtml.includes('members only') ||\n                          searchHtml.includes('login required') ||\n                          searchHtml.includes('restricted') ||\n                          searchHtml.includes('memberpress') ||\n                          searchHtml.includes('restrict content') ||\n                          searchHtml.includes('private');\n\nhasScannedPdfs = hasScannedSignals ? 'Yes' : 'Unknown';\nhasPrivateDocs = hasPrivateSignals ? 'Yes' : 'Unknown';\n\n// Determine status\nif (hasPdfs) {\n  status = 'Qualified';\n  agentNote = `WordPress confirmed + PDFs found | Checked: ${contactData.pdf_search_url}`;\n} else {\n  status = 'Qualified (Marketing)';\n  agentNote = `WordPress confirmed — no PDFs detected | Checked: ${contactData.pdf_search_url}`;\n}\n\n// Format emails and phones\nconst websiteEmail = (contactData.all_emails || []).join(', ');\nconst websitePhone = (contactData.all_phones || []).join(', ');\n\nreturn [{\n  json: {\n    pageId,\n    website_url: websiteUrl,\n    status,\n    has_pdfs: hasPdfs ? 'Yes' : 'No',\n    has_scanned_pdfs: hasScannedPdfs,\n    has_private_docs: hasPrivateDocs,\n    website_email: websiteEmail,\n    website_phone: websitePhone,\n    wordpress: 'Yes',\n    g_outrach: 'Qualified',\n    agent_note: agentNote\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5320,
+        0
+      ],
+      "id": "c4992b7b-4895-48ee-8a87-0b7cca2ad81e",
+      "name": "Check Signals"
+    },
+    {
+      "parameters": {
+        "jsCode": "const wpData = $('Check WordPress').first().json;\n\n// Keep emails and phones even if not WordPress\nconst websiteEmail = (wpData.homepage_emails || []).join(', ');\nconst websitePhone = (wpData.homepage_phones || []).join(', ');\n\nreturn [{\n  json: {\n    pageId: wpData.pageId,\n    website_url: wpData.website_url,\n    status: 'Rejected',\n    has_pdfs: 'No',\n    has_scanned_pdfs: 'Unknown',\n    has_private_docs: 'Unknown',\n    website_email: websiteEmail,\n    website_phone: websitePhone,\n    wordpress: 'No',\n    g_outrach: 'No',\n    agent_note: wpData.site_reachable\n      ? 'WordPress not confirmed — no wp-content or wp-includes found'\n      : 'Site unreachable or timeout'\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3800,
+        220
+      ],
+      "id": "31b5c9c2-9d1c-4270-a0ec-ca096635e2f7",
+      "name": "Mark as Rejected"
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "operation": "update",
+        "pageId": {
+          "__rl": true,
+          "value": "={{ $json.pageId }}",
+          "mode": "id"
+        },
+        "propertiesUi": {
+          "propertyValues": [
+            {
+              "key": "Status|select",
+              "selectValue": "={{ $json.status }}"
+            },
+            {
+              "key": "Has PDFs|select",
+              "selectValue": "={{ $json.has_pdfs }}"
+            },
+            {
+              "key": "Has Scanned PDFs|select",
+              "selectValue": "={{ $json.has_scanned_pdfs }}"
+            },
+            {
+              "key": "Has Private Docs|select",
+              "selectValue": "={{ $json.has_private_docs }}"
+            },
+            {
+              "key": "Website Email|rich_text",
+              "textContent": "={{ $json.website_email }}"
+            },
+            {
+              "key": "Website Phone|rich_text",
+              "textContent": "={{ $json.website_phone }}"
+            },
+            {
+              "key": "Agent (1.5) Note |rich_text",
+              "textContent": "={{ $json.agent_note }}"
+            },
+            {
+              "key": "Wordpress|select",
+              "selectValue": "={{ $json.wordpress }}"
+            },
+            {
+              "key": "2.5 Sent|select",
+              "selectValue": "={{ $json.g_outrach }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2.2,
+      "position": [
+        5700,
+        0
+      ],
+      "id": "6b73bdf9-1b8a-4ee8-b12b-016b60d68a64",
+      "name": "Update Lead in Notion",
+      "credentials": {
+        "notionApi": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Notion account-CBL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const parseData = $('Prepare Leads List').first().json;\n\nreturn [{\n  json: {\n    total: parseData.total,\n    runDate: new Date().toISOString().split('T')[0]\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5700,
+        220
+      ],
+      "id": "e4e8b269-10c7-44ab-9109-7d1ebdb51b61",
+      "name": "Prepare Summary"
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "YOUR_SLACK_CHANNEL_ID",
+          "mode": "list",
+          "cachedResultName": "your-slack-channel"
+        },
+        "text": "=✅ *Agent 1.5 — Site Verification Complete*\n📅 Date: {{ $json.runDate }}\n📊 Total verified: {{ $json.total }}\n\n👉 <https://notion.so/YOUR_DATABASE_ID|Review in Notion>",
+        "otherOptions": {
+          "includeLinkToWorkflow": false
+        }
+      },
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.4,
+      "position": [
+        6080,
+        0
+      ],
+      "id": "e3cbfd06-cf2b-4384-be6d-ed700e1bbdda",
+      "name": "Slack Summary",
+      "credentials": {
+        "slackApi": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Slack Bot Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "select": "user",
+        "user": {
+          "__rl": true,
+          "value": "UEJR5LKSB",
+          "mode": "list",
+          "cachedResultName": "your-slack-channel"
+        },
+        "text": "=⚠️ *Agent 1.5 — No leads to verify*\n📅 Date: {{ $now.toFormat('dd MMM yyyy') }}\n\nNo leads with Status = Identified found.\nRun Agent 1 first to discover new leads.",
+        "otherOptions": {}
+      },
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.4,
+      "position": [
+        1520,
+        0
+      ],
+      "id": "0cd5570e-d115-4933-811a-5f16fe295de8",
+      "name": "Slack No Leads",
+      "credentials": {
+        "slackApi": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Slack Bot Token"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Read Identified Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Identified Leads": {
+      "main": [
+        [
+          {
+            "node": "Prepare Leads List",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Leads List": {
+      "main": [
+        [
+          {
+            "node": "Any Leads to Verify?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Any Leads to Verify?": {
+      "main": [
+        [
+          {
+            "node": "Slack No Leads",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Split Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Leads": {
+      "main": [
+        [
+          {
+            "node": "Loop One by One",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop One by One": {
+      "main": [
+        [
+          {
+            "node": "Prepare Summary",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fetch Homepage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Homepage": {
+      "main": [
+        [
+          {
+            "node": "Check WordPress",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check WordPress": {
+      "main": [
+        [
+          {
+            "node": "Is WordPress?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is WordPress?": {
+      "main": [
+        [
+          {
+            "node": "Email Found on Homepage?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark as Rejected",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email Found on Homepage?": {
+      "main": [
+        [
+          {
+            "node": "Use Homepage Email",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fetch Contact Page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Use Homepage Email": {
+      "main": [
+        [
+          {
+            "node": "Fetch PDF Search Page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Contact Page": {
+      "main": [
+        [
+          {
+            "node": "Merge Contact Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Contact Data": {
+      "main": [
+        [
+          {
+            "node": "Fetch PDF Search Page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch PDF Search Page": {
+      "main": [
+        [
+          {
+            "node": "Check Signals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Signals": {
+      "main": [
+        [
+          {
+            "node": "Update Lead in Notion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark as Rejected": {
+      "main": [
+        [
+          {
+            "node": "Update Lead in Notion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Lead in Notion": {
+      "main": [
+        [
+          {
+            "node": "Loop One by One",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Summary": {
+      "main": [
+        [
+          {
+            "node": "Slack Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Daily Schedule - 6PM (Dhaka)": {
+      "main": [
+        [
+          {
+            "node": "Read Identified Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false,
+    "timeSavedMode": "fixed",
+    "saveManualExecutions": false,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "meta": {
+    "instanceId": "89282cf319585d0a7a52670a5b93095ddc119ae917543dc2b718c88da03e0ac1"
+  },
+  "tags": []
+}

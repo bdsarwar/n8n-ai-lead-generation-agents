@@ -1,0 +1,669 @@
+{
+  "name": "Agent 1 — Lead Discovery --v2",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## 1. Trigger & Load Existing Leads\nRuns 5x/day or manually. Pulls every lead already in Notion so\ntoday's search never rediscovers the same site twice.",
+        "height": 480,
+        "width": 720,
+        "color": 4
+      },
+      "id": "sticky-1-trigger-&-load-existing-leads",
+      "name": "1. Trigger & Load Existing Leads",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -50,
+        -110
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 2. Build Today's Search Plan\nPicks today's target niche + region (rotates daily) and builds\nthe strict system prompt the AI agent has to follow.",
+        "height": 260,
+        "width": 720,
+        "color": 5
+      },
+      "id": "sticky-2-build-today's-search-plan",
+      "name": "2. Build Today's Search Plan",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        710,
+        -110
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 3. AI Discovery Agent\nThe only step with AI reasoning. Gemini + Perplexity + Google\nSearch propose candidate sites — nothing here is trusted yet.",
+        "height": 520,
+        "width": 800,
+        "color": 6
+      },
+      "id": "sticky-3-ai-discovery-agent",
+      "name": "3. AI Discovery Agent",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1470,
+        -110
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 4. Parse, Validate & Save\nExtracts the JSON array, filters out anything already known,\nand writes each new lead into Notion (or posts a no-leads alert).",
+        "height": 480,
+        "width": 1480,
+        "color": 3
+      },
+      "id": "sticky-4-parse,-validate-&-save",
+      "name": "4. Parse, Validate & Save",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2310,
+        -110
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 5. Report to Slack\nPosts the run summary to Slack once every new lead is saved.",
+        "height": 260,
+        "width": 720,
+        "color": 7
+      },
+      "id": "sticky-5-report-to-slack",
+      "name": "5. Report to Slack",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        3830,
+        -110
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 12
+            },
+            {
+              "triggerAtHour": 13
+            },
+            {
+              "triggerAtHour": 14
+            },
+            {
+              "triggerAtHour": 15
+            },
+            {
+              "triggerAtHour": 16
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        0,
+        0
+      ],
+      "id": "6e65b635-68e0-44df-84b3-359f4b62a8c8",
+      "name": "Daily Schedule - 12-4PM (Dhaka)"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        220
+      ],
+      "id": "3549f0ef-9c3e-46c6-b4e2-595c7847c9ca",
+      "name": "Manual Trigger"
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "operation": "getAll",
+        "databaseId": {
+          "__rl": true,
+          "value": "YOUR_NOTION_DATABASE_ID",
+          "mode": "id"
+        },
+        "returnAll": true,
+        "simple": false,
+        "filterType": "manual",
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "key": "2.5 Date Sent|date",
+              "condition": "equals",
+              "date": "2026-09-22T00:00:00"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2.2,
+      "position": [
+        380,
+        0
+      ],
+      "id": "218ad7ff-8d90-423c-8f07-04deb88e6fca",
+      "name": "Read Existing Leads from Notion",
+      "alwaysOutputData": true,
+      "credentials": {
+        "notionApi": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Notion account-CBL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const notionItems = $input.all();\n\nconst existingUrls = notionItems\n  .map(item => {\n    const props = item.json.properties || {};\n\n    const titleProp = props['Website URL'];\n    if (titleProp?.title?.length > 0) {\n      return titleProp.title[0].plain_text.toLowerCase().trim().replace(/\\/$/, '');\n    }\n\n    const urlProp = props['Website'] || props['URL'] || props['Website URL'];\n    if (urlProp?.url) {\n      return urlProp.url.toLowerCase().trim().replace(/\\/$/, '');\n    }\n\n    return null;\n  })\n  .filter(Boolean);\n\n// ---------- SCHEDULE / RUN SLOT ----------\n// Adjust the timezone and hour math below to match your own schedule triggers.\n\nlet hourNow;\n\ntry {\n  const scheduleData = $('Daily Schedule - 12-4PM (Dhaka)').first().json;\n  hourNow = Number(scheduleData.Hour);\n} catch (e) {\n  hourNow = Number(\n    new Intl.DateTimeFormat('en-US', {\n      timeZone: 'Asia/Dhaka', // <-- EDIT: your timezone\n      hour: 'numeric',\n      hour12: false,\n    }).format(new Date())\n  );\n}\n\nconst startHour = 12; // <-- EDIT: hour your first daily run starts\nlet runSlot = hourNow - startHour;\nif (runSlot < 0 || runSlot > 4 || Number.isNaN(runSlot)) {\n  runSlot = 0;\n}\n\n// ---------- DATE CALCULATION ----------\n\nfunction getLocalDateParts(date = new Date()) {\n  const parts = new Intl.DateTimeFormat('en-CA', {\n    timeZone: 'Asia/Dhaka', // <-- EDIT: your timezone\n    year: 'numeric', month: '2-digit', day: '2-digit',\n  }).formatToParts(date);\n  const get = type => parts.find(p => p.type === type)?.value;\n  return { year: Number(get('year')), month: Number(get('month')), day: Number(get('day')) };\n}\n\nconst todayParts = getLocalDateParts();\nconst todayUTC = Date.UTC(todayParts.year, todayParts.month - 1, todayParts.day);\nconst startDateUTC = Date.UTC(2026, 0, 1); // <-- EDIT: the date you started running this\nconst dayNumber = Math.max(0, Math.floor((todayUTC - startDateUTC) / 86400000));\nconst runDate = `${todayParts.year}-${String(todayParts.month).padStart(2, '0')}-${String(todayParts.day).padStart(2, '0')}`;\n\n// ---------- REGIONS ----------\n// EDIT: the regions your search rotates through.\n\nconst regions = [\n  'United States',\n  'Canada',\n  'United Kingdom',\n];\n\n// =====================================================================\n// EDIT EVERYTHING BELOW THIS LINE FOR YOUR OWN PRODUCT.\n//\n// This is where you define who you're looking for. Each \"ICP\" (ideal\n// customer profile) needs:\n//   - name / who / pain          -> used in the AI agent's system prompt\n//   - qualifying_signals         -> what makes a lead worth verifying\n//   - perplexity_prompt          -> a natural-language search instruction\n//   - google_queries[]           -> Google search-operator strings; the\n//                                    workflow rotates through these day by\n//                                    day so you're not hitting the same\n//                                    exact query every run\n//\n// The two examples below are illustrative placeholders only — replace\n// them with your own niches, product signals, and search operators.\n// =====================================================================\n\nconst exampleIcp1Queries = [\n  '\"local bakery\" OR \"family bakery\" instagram OR facebook -inurl:blog -inurl:docs',\n  '\"neighborhood cafe\" wordpress \"menu\" filetype:pdf -inurl:blog -inurl:docs',\n];\n\nconst exampleIcp2Queries = [\n  '\"independent bookstore\" wordpress \"events calendar\" -inurl:blog -inurl:docs',\n  '\"local bookshop\" \"staff picks\" newsletter -inurl:blog -inurl:docs',\n];\n\nconst icpQuerySets = [exampleIcp1Queries, exampleIcp2Queries];\nconst queryIndex = dayNumber % 2; // <-- EDIT: match the length of your shortest query set\n\nconst icps = [\n  {\n    name: 'EXAMPLE-1 -- Replace With Your Own Niche',\n    who: 'Describe the type of organization or business you\\'re targeting.',\n    pain: 'Describe the specific problem your product solves for them.',\n    qualifying_signals: [\n      'A fact you can verify with a real HTTP request',\n      'Another verifiable, objective signal',\n      'A size/scale signal (e.g. \"small, single-location\")',\n    ],\n    perplexity_prompt: `List 15 [your target org type] in ${regions[runSlot % regions.length]} that [signal your product needs]. Include their website URLs.`,\n    google_operator: `${exampleIcp1Queries[queryIndex % exampleIcp1Queries.length]} \"${regions[runSlot % regions.length]}\"`,\n  },\n  {\n    name: 'EXAMPLE-2 -- Replace With Your Own Niche',\n    who: 'A second example target audience — delete or add more as needed.',\n    pain: 'What problem does your product solve for this group specifically?',\n    qualifying_signals: [\n      'A fact you can verify with a real HTTP request',\n      'Another verifiable, objective signal',\n    ],\n    perplexity_prompt: `List 15 [your second target org type] in ${regions[runSlot % regions.length]} that [signal]. Include their website URLs.`,\n    google_operator: `${exampleIcp2Queries[queryIndex % exampleIcp2Queries.length]} \"${regions[runSlot % regions.length]}\"`,\n  },\n];\n\nconst icpIndex = dayNumber % icps.length;\nconst todayIcp = icps[icpIndex];\nconst todayRegion = regions[runSlot % regions.length];\nconst countryIndex = runSlot % regions.length;\n\n// ---------- OUTPUT ----------\n\nreturn [\n  {\n    json: {\n      existingUrls,\n      existingCount: existingUrls.length,\n      todayIcp,\n      icpIndex,\n      queryIndex,\n      todayRegion,\n      countryIndex,\n      runSlot,\n      bdHour: hourNow,\n      runDate,\n      debug: {\n        dayNumber,\n        startDateUTC,\n        startHour,\n        selectedSchedule: `${hourNow}:00`,\n        countryFormula: `${runSlot} % ${regions.length}`,\n      },\n    },\n  },\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        760,
+        0
+      ],
+      "id": "e0150584-6bf2-4852-a9ca-a7ad2957b451",
+      "name": "Build ICP Context + Skip List"
+    },
+    {
+      "parameters": {
+        "jsCode": "const context = $input.first().json;\nconst { todayIcp, existingUrls, runDate, icpIndex, todayRegion, queryIndex } = context;\n\n// =====================================================================\n// EDIT THIS: describe your own product here. This is what the AI agent\n// uses to judge whether a lead is a fit, so be specific about what your\n// product actually does and who it's for.\n// =====================================================================\n\nconst YOUR_PRODUCT_NAME = 'Your Product Name';\nconst YOUR_PRODUCT_DESCRIPTION = `[Your Product Name] is a [type of product] that [what it does, in one sentence].\n- [Key feature 1]\n- [Key feature 2]\n- [Pricing, if relevant to qualifying a lead, e.g. \"Starts at $X/mo\"]`;\n\nconst systemPrompt = `You are a lead discovery agent for ${YOUR_PRODUCT_NAME}.\n\nYour job is to find websites/organizations matching today's ICP using\nPerplexity and SerpApi search tools, then return structured lead data.\n\nPRODUCT:\n${YOUR_PRODUCT_DESCRIPTION}\n\nTODAY'S ICP:\nName: ${todayIcp.name}\nWho: ${todayIcp.who}\nPain: ${todayIcp.pain}\nQualifying signals: ${todayIcp.qualifying_signals.join(', ')}\n\nSIZE RULE (apply, but do not over-exclude):\nPrefer small, single-location, volunteer or lightly-staffed organizations.\nEXCLUDE only when clearly large: a multi-campus institution, a national\nheadquarters/denomination office, a Fortune-level or nationally famous\nbrand. If unsure, INCLUDE it — false positives are fine, we verify\nmanually downstream.\n[EDIT: adjust this rule to match your own product's ideal customer size]\n\nURL RULE (strict — do not change this):\nOnly use a website_url that appeared literally in a Perplexity result or\na SerpApi search result — copy it exactly as returned. Never construct\nor guess a domain from an organization's name. This is the single\nbiggest defense against the AI hallucinating leads that don't exist.\n\nTODAY'S REGION: ${todayRegion}\n\nVOLUME TARGET (soft): Aim for 15-20 leads across up to 4 search calls.\nIf fewer qualify after 4 searches, that is acceptable — return whatever\nyou found. Never apologize, explain, or comment on the count in your\noutput.\n\nOUTPUT RULES (absolute, no exceptions, regardless of how many leads you found):\n- Your entire response must be a single JSON array and nothing else\n- The very first character of your response must be [\n- The very last character of your response must be ]\n- No prose before or after the array, no apologies, no explanations, no markdown, no \\`\\`\\`json fences\n- An array with 3 leads formatted correctly is a SUCCESS. An array with 15 leads plus extra text is a FAILURE.\n- Only include root domains like example.com or www.example.com\n- Do NOT include subdomains like blog.example.com or docs.example.com\n- Do NOT include free wordpress.com hosted blogs\n\nREQUIRED JSON SCHEMA PER LEAD:\n{\n  \"website_url\": \"https://example.com\",\n  \"icp\": \"${todayIcp.name}\",\n  \"source\": \"Perplexity\" OR \"Google Search\",\n  \"org_size\": \"small/local\" OR \"large/national\" OR \"unknown\",\n  \"qualifying_signal_1\": \"Yes\" OR \"No\" OR \"Unknown\",\n  \"qualifying_signal_2\": \"Yes\" OR \"No\" OR \"Unknown\",\n  \"contact_name\": \"\",\n  \"notes\": \"One concrete fact about this org, not a generic description\"\n}\n[EDIT: rename qualifying_signal_1/2 to match your own product's actual\nqualifying signals — these should mirror what Agent 1.5 checks with a\nreal HTTP request, not just what the AI guesses]\n\nFILTER RULE: only return leads where org_size is exactly \"small/local\".\nDo not return \"large/national\" or \"unknown\" leads.`;\n\nconst agentPrompt = `Today is ${runDate}. Running ${todayIcp.name} for region: ${todayRegion}.\n\nSTEP 1 — Search with Perplexity\nUse perplexity_search with this exact prompt:\n\"${todayIcp.perplexity_prompt}\"\n\nSTEP 2 — Search with SerpApi\nUse SerpApi Search Tool with this query:\n${todayIcp.google_operator}\n\nSTEP 3 — Widen if useful (optional, up to 2 more calls)\nIf you have fewer than 15 qualifying leads, you may run up to 2\nadditional searches using different cities/states/keywords.\n\nSTEP 4 — Output\nWrite ONLY the JSON array of whatever leads you found — even if fewer\nthan 15. Starting character [, ending character ]. No other text.`;\n\nreturn [{\n  json: {\n    systemPrompt,\n    agentPrompt\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1140,
+        0
+      ],
+      "id": "840cf1f3-0636-4019-ac81-8ab5fd1b2f67",
+      "name": "Build Agent Prompt"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.agentPrompt }}",
+        "options": {
+          "systemMessage": "={{ $json.systemPrompt }}"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [
+        1520,
+        0
+      ],
+      "id": "c6c88296-f575-4dec-89b4-9c8db7761f4e",
+      "name": "Lead Discovery AI Agent",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.perplexity.ai/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"sonar\",\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"{prompt}\"\n    }\n  ],\n  \"temperature\": 0.2,\n  \"max_tokens\": 2000,\n  \"return_citations\": true\n}",
+        "placeholderDefinitions": {
+          "values": [
+            {
+              "name": "prompt",
+              "description": "The research prompt to send to Perplexity"
+            }
+          ]
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [
+        1520,
+        260
+      ],
+      "id": "fe0ee4c7-e99c-4315-a426-57b4574e837c",
+      "name": "Perplexity Search Tool",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Perplexity-Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const agentOutput = $input.first().json.output || \n                    $input.first().json.text || '';\n\nlet leads = [];\n\nconst jsonMatch = agentOutput.match(/\\[\\s*\\{[\\s\\S]*?\\}\\s*\\]/);\nif (jsonMatch) {\n  try {\n    leads = JSON.parse(jsonMatch[0]);\n  } catch(e) {\n    try {\n      const cleaned = jsonMatch[0]\n        .replace(/[\\u201C\\u201D]/g, '\"')\n        .replace(/[\\u2018\\u2019]/g, \"'\")\n        .replace(/[\\x00-\\x08\\x0B\\x0C\\x0E-\\x1F\\x7F]/g, '');\n      leads = JSON.parse(cleaned);\n    } catch(e2) {\n      leads = [];\n    }\n  }\n}\n\nconst todayIcp = $('Build ICP Context + Skip List').first().json.todayIcp;\nconst icpIndex = $('Build ICP Context + Skip List').first().json.icpIndex;\nconst existingUrls = $('Build ICP Context + Skip List').first().json.existingUrls || [];\n\n// Normalize URL for comparison\nfunction normalizeUrl(url) {\n  return (url || '').toLowerCase()\n    .replace(/https?:\\/\\/(www\\.)?/, '')\n    .replace(/\\/$/, '')\n    .trim();\n}\n\n// Build a set of existing normalized URLs for fast lookup\nconst existingSet = new Set(existingUrls.map(normalizeUrl));\n\nconst validLeads = leads\n  .filter(lead => lead && lead.website_url)\n  .map(lead => ({\n    website_url: (lead.website_url || '').trim(),\n    icp: lead.icp || todayIcp.name,\n    source: lead.source || 'Perplexity',\n    org_size: lead.org_size || 'unknown',\n    wordpress_confirmed: lead.wordpress_confirmed || 'Unknown',\n    has_scanned_pdfs: lead.has_scanned_pdfs || 'Unknown',\n    has_private_docs: lead.has_private_docs || 'Unknown',\n    notes: lead.notes || '',\n    contact_name: lead.contact_name || ''\n  }))\n  // Backstop: drop any large/national lead even if the agent's own filter missed it\n  .filter(lead => lead.org_size !== 'large/national')\n  // Deduplicate against all existing URLs in Notion\n  .filter(lead => !existingSet.has(normalizeUrl(lead.website_url)))\n  // Deduplicate within this batch (in case agent returned same URL twice)\n  .filter((lead, index, self) =>\n    index === self.findIndex(l => normalizeUrl(l.website_url) === normalizeUrl(lead.website_url))\n  )\n    // Hard exclude any government domain (.gov, .gov.uk, .gov.au, etc.)\n  .filter(lead => !/\\.gov(\\.[a-z]{2,3})?(\\/|$)/i.test(normalizeUrl(lead.website_url)));\n\n\nif (validLeads.length === 0) {\n  return [{ json: { \n    noLeads: true, \n    total: 0, \n    icpName: todayIcp.name,\n    icpIndex: icpIndex + 1,\n    leads: [] \n  }}];\n}\n\nreturn [{\n  json: {\n    noLeads: false,\n    leads: validLeads,\n    total: validLeads.length,\n    icpName: todayIcp.name,\n    icpIndex: icpIndex + 1\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2360,
+        0
+      ],
+      "id": "eda1d689-273d-4b19-b181-96ae3cbaa4f5",
+      "name": "Parse and Validate Leads"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "no-leads-check",
+              "leftValue": "={{ $json.noLeads }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2740,
+        0
+      ],
+      "id": "435e983e-4ed8-4f0b-9186-62ccd91fd94e",
+      "name": "Any Leads Found?"
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "leads",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        3120,
+        0
+      ],
+      "id": "95c9cb6d-3549-421c-afa4-fe7fca4ff402",
+      "name": "Split Leads"
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "databaseId": {
+          "__rl": true,
+          "value": "YOUR_NOTION_DATABASE_ID",
+          "mode": "id"
+        },
+        "propertiesUi": {
+          "propertyValues": [
+            {
+              "key": "Website URL|title",
+              "title": "={{ $json.website_url }}"
+            },
+            {
+              "key": "ICP|select",
+              "selectValue": "={{ $json.icp }}"
+            },
+            {
+              "key": "Status|select",
+              "selectValue": "Identified"
+            },
+            {
+              "key": "Source|select",
+              "selectValue": "={{ $json.source }}"
+            },
+            {
+              "key": "Notes|rich_text",
+              "textContent": "={{ $json.notes }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2.2,
+      "position": [
+        3500,
+        0
+      ],
+      "id": "1bec2ecb-237b-4e97-9c2e-c064af622717",
+      "name": "Save Lead to Notion",
+      "credentials": {
+        "notionApi": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Notion account-CBL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const allSaved = $input.all();\nconst parseData = $('Parse and Validate Leads').first().json;\n\nreturn [{\n  json: {\n    total: parseData.total,\n    icpName: parseData.icpName,\n    icpIndex: parseData.icpIndex,\n    savedCount: allSaved.length,\n    runDate: new Date().toISOString().split('T')[0]\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3880,
+        0
+      ],
+      "id": "aff68700-a62e-449e-8491-e73a1918d286",
+      "name": "Prepare Summary"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        1980,
+        260
+      ],
+      "id": "e461dc65-b32e-41d4-8d84-fe630cd3ca08",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Google Gemini(PaLM) CBL_MARKETING_SAR"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://serpapi.com/search?engine=google&q={query}&num=5&api_key=YOUR_SERPAPI_KEY",
+        "placeholderDefinitions": {
+          "values": [
+            {
+              "name": "query",
+              "description": "The Google search query with operators to find WordPress PDF sites"
+            }
+          ]
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [
+        1680,
+        260
+      ],
+      "id": "fa2a2cdf-ec09-4c1d-b6fb-5538f70caf21",
+      "name": "SerpApi Search Tool"
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "YOUR_SLACK_CHANNEL_ID",
+          "mode": "list",
+          "cachedResultName": "your-slack-channel"
+        },
+        "text": "=✅ *Agent 1 — Lead Discovery Complete*\n📅 Date: {{ $json.runDate }}\n🎯 Today's ICP: {{ $json.icpName }} ({{ $json.icpIndex }}/3)\n📊 New leads saved: {{ $json.savedCount }}\n\n👉 <https://notion.so/YOUR_DATABASE_ID|Review in Notion>",
+        "otherOptions": {
+          "includeLinkToWorkflow": false
+        }
+      },
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.4,
+      "position": [
+        4260,
+        0
+      ],
+      "id": "e091b0e2-4a2f-4ec2-afc8-be60b8286446",
+      "name": "Send a message",
+      "credentials": {
+        "slackApi": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Slack Bot Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "YOUR_SLACK_CHANNEL_ID",
+          "mode": "list",
+          "cachedResultName": "your-slack-channel"
+        },
+        "text": "=⚠️ *Agent 1 — No new leads found today*\n📅 Date: {{ $now.toFormat('dd MMM yyyy') }}\n🎯 ICP: {{ $json.icpName }}\n\nAll discovered sites were duplicates or failed qualification.",
+        "otherOptions": {}
+      },
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.4,
+      "position": [
+        3120,
+        220
+      ],
+      "id": "41fddd12-53aa-45cc-819f-d159fedf6cfb",
+      "name": "Send a message1",
+      "credentials": {
+        "slackApi": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Slack Bot Token"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Read Existing Leads from Notion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Existing Leads from Notion": {
+      "main": [
+        [
+          {
+            "node": "Build ICP Context + Skip List",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build ICP Context + Skip List": {
+      "main": [
+        [
+          {
+            "node": "Build Agent Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Agent Prompt": {
+      "main": [
+        [
+          {
+            "node": "Lead Discovery AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lead Discovery AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Parse and Validate Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse and Validate Leads": {
+      "main": [
+        [
+          {
+            "node": "Any Leads Found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Any Leads Found?": {
+      "main": [
+        [
+          {
+            "node": "Send a message1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Split Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Leads": {
+      "main": [
+        [
+          {
+            "node": "Save Lead to Notion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Lead to Notion": {
+      "main": [
+        [
+          {
+            "node": "Prepare Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Summary": {
+      "main": [
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Perplexity Search Tool": {
+      "ai_tool": [
+        [
+          {
+            "node": "Lead Discovery AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Lead Discovery AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SerpApi Search Tool": {
+      "ai_tool": [
+        [
+          {
+            "node": "Lead Discovery AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Daily Schedule - 12-4PM (Dhaka)": {
+      "main": [
+        [
+          {
+            "node": "Read Existing Leads from Notion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "89282cf319585d0a7a52670a5b93095ddc119ae917543dc2b718c88da03e0ac1"
+  },
+  "tags": [
+    {
+      "updatedAt": "2026-06-06T08:53:21.710Z",
+      "createdAt": "2026-06-06T08:53:21.710Z",
+      "id": "9yiUjPam0oBpuHFY",
+      "name": "Notion"
+    },
+    {
+      "updatedAt": "2026-06-06T04:54:54.273Z",
+      "createdAt": "2026-06-06T04:54:54.273Z",
+      "id": "BQfHN0THyZrL9QRm",
+      "name": "Agent"
+    },
+    {
+      "updatedAt": "2026-06-12T08:22:05.212Z",
+      "createdAt": "2026-06-12T08:22:05.212Z",
+      "id": "DmcreqTDZqy2aqmN",
+      "name": "Gemini"
+    },
+    {
+      "updatedAt": "2026-06-12T08:22:29.306Z",
+      "createdAt": "2026-06-12T08:22:29.306Z",
+      "id": "Otfs1bcudtZY79Ei",
+      "name": "SerpApi"
+    },
+    {
+      "updatedAt": "2026-06-12T08:22:23.379Z",
+      "createdAt": "2026-06-12T08:22:23.379Z",
+      "id": "QEtpUTix64mEOgm6",
+      "name": "Perplexity"
+    }
+  ]
+}

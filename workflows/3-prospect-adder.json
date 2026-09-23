@@ -1,0 +1,630 @@
+{
+  "name": "Agent 3 — Snov.io Prospect Adder",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## 1. Trigger & Load Verified Leads\nRuns nightly or manually. Pulls every lead with a confirmed,\nreal contact email.",
+        "height": 480,
+        "width": 1860,
+        "color": 4
+      },
+      "id": "sticky-1-trigger-&-load-verified-leads",
+      "name": "1. Trigger & Load Verified Leads",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -50,
+        -110
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 2. Loop & Authenticate\nProcesses one lead at a time and refreshes the Snov.io token.",
+        "height": 260,
+        "width": 1100,
+        "color": 5
+      },
+      "id": "sticky-2-loop-&-authenticate",
+      "name": "2. Loop & Authenticate",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1850,
+        -110
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 3. Add to Snov.io List & Pick Template\nAdds the contact to the right ICP's Snov.io list and picks\nwhich cold-email template that segment uses next.",
+        "height": 260,
+        "width": 720,
+        "color": 6
+      },
+      "id": "sticky-3-add-to-snovio-list-&-pick-template",
+      "name": "3. Add to Snov.io List & Pick Template",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2990,
+        -110
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 4. Save & Continue Loop\nWrites the result back to Notion, then waits before the next lead.",
+        "height": 260,
+        "width": 1100,
+        "color": 3
+      },
+      "id": "sticky-4-save-&-continue-loop",
+      "name": "4. Save & Continue Loop",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        3750,
+        -110
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 5. Report to Slack\nPosts how many prospects were added to Snov.io this run.",
+        "height": 260,
+        "width": 720,
+        "color": 7
+      },
+      "id": "sticky-5-report-to-slack",
+      "name": "5. Report to Slack",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        4890,
+        -110
+      ]
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "b06d0f85-6e13-4cec-8a71-8526d02e0155",
+      "name": "Manual Trigger"
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "operation": "getAll",
+        "databaseId": {
+          "__rl": true,
+          "value": "YOUR_NOTION_DATABASE_ID",
+          "mode": "id"
+        },
+        "returnAll": true,
+        "simple": false,
+        "filterType": "manual",
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "key": "Status|select",
+              "condition": "equals",
+              "selectValue": "Qualified (Email Found)"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2.2,
+      "position": [
+        380,
+        0
+      ],
+      "id": "a396eaec-5803-4432-ab95-0e3d2b626c84",
+      "name": "Read Qualified Email Found Leads",
+      "credentials": {
+        "notionApi": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Notion account-CBL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\nif (!items || items.length === 0) {\n  return [{ json: { noLeads: true, total: 0 } }];\n}\n\n// =====================================================================\n// EDIT THIS: map each ICP name (must match Agent 1's `icps[].name`\n// values exactly) to the Snov.io list ID you want that ICP's contacts\n// added to. Create the lists in Snov.io first, then copy their numeric\n// IDs here from the Snov.io dashboard URL.\n// =====================================================================\nconst listIds = {\n  'EXAMPLE-1 -- Replace With Your Own Niche': 0000000,\n  'EXAMPLE-2 -- Replace With Your Own Niche': 0000000,\n};\n\nconst leads = items.map(item => {\n  const props = item.json.properties || {};\n\n  const getTitle = (p) => (!p || !p.title || !p.title.length) ? '' : p.title.map(t => t.plain_text).join('');\n  const getSelect = (p) => (!p || !p.select) ? '' : p.select.name || '';\n  const getEmail = (p) => (!p || !p.email) ? '' : p.email || '';\n  const getRichText = (p) => (!p || !p.rich_text || !p.rich_text.length) ? '' : p.rich_text.map(t => t.plain_text).join('');\n\n  const websiteUrl = getTitle(props['Website URL']);\n  const icp = getSelect(props['ICP']);\n  const email = getEmail(props['Email']);\n  const contactName = getRichText(props['Contact Name']);\n  const company = getRichText(props['Company']) || websiteUrl.replace(/https?:\\/\\/(www\\.)?/, '').split('/')[0];\n\n  // Split contact name into first/last\n  const nameParts = contactName.trim().split(' ');\n  const firstName = nameParts[0] || '';\n  const lastName = nameParts.slice(1).join(' ') || '';\n\n  // Get list ID for ICP\n  const listId = listIds[icp] || null;\n\n  return {\n    pageId: item.json.id,\n    website_url: websiteUrl,\n    icp,\n    email,\n    firstName,\n    lastName,\n    company,\n    listId\n  };\n}).filter(l => l.email && l.listId);\n\nif (!leads.length) {\n  return [{ json: { noLeads: true, total: 0 } }];\n}\n\nreturn [{ json: { noLeads: false, leads, total: leads.length } }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        760,
+        0
+      ],
+      "id": "1528b764-859b-496c-83fe-0a89ffde299f",
+      "name": "Prepare Leads List"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "no-leads-check",
+              "leftValue": "={{ $json.noLeads }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1140,
+        0
+      ],
+      "id": "e69fde6b-83fe-4b6e-aebd-7b63663b2b3e",
+      "name": "Any Leads?"
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "leads",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        1900,
+        0
+      ],
+      "id": "070871cf-41cf-4e52-9f4b-c8ff0cff2582",
+      "name": "Split Leads"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        2280,
+        0
+      ],
+      "id": "35e0786f-f2a7-4055-8e73-c39a2312b8a3",
+      "name": "Loop One by One"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.snov.io/v1/oauth/access_token",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"grant_type\": \"client_credentials\",\n  \"client_id\": \"YOUR_SNOV_CLIENT_ID\",\n  \"client_secret\": \"YOUR_SNOV_CLIENT_SECRET\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2660,
+        0
+      ],
+      "id": "81f20474-8ce9-4c31-9533-8bc85eba54a6",
+      "name": "Get Snov.io Token",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.snov.io/v1/add-prospect-to-list",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $json.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"listId\": {{ $('Loop One by One').first().json.listId }},\n  \"email\": \"{{ $('Loop One by One').first().json.email }}\",\n  \"firstName\": \"{{ $('Loop One by One').first().json.firstName }}\",\n  \"lastName\": \"{{ $('Loop One by One').first().json.lastName }}\",\n  \"companyName\": \"{{ $('Loop One by One').first().json.company }}\",\n  \"companySite\": \"{{ $('Loop One by One').first().json.website_url }}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        3040,
+        0
+      ],
+      "id": "fa0d190a-9646-4136-828a-e857aba4efb8",
+      "name": "Add Prospect to Snov.io List",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const leadData = $('Loop One by One').first().json;\nconst snovResult = $('Add Prospect to Snov.io List').first().json;\n\n// =====================================================================\n// EDIT THIS: map each ICP name (must match Agent 1's `icps[].name`\n// values exactly) to the name of the cold-email template you've set up\n// in Snov.io for that segment.\n// =====================================================================\nconst icpTemplateMap = {\n  'EXAMPLE-1 -- Replace With Your Own Niche': 'Example 1 Cold Template',\n  'EXAMPLE-2 -- Replace With Your Own Niche': 'Example 2 Cold Template',\n};\n\nconst emailTemplate = icpTemplateMap[leadData.icp] || Object.values(icpTemplateMap)[0];\nconst today = new Date().toISOString().split('T')[0];\n\n// Handle all possible Snov.io responses\nlet snovId = '';\nlet snovStatus = '';\n\nif (snovResult?.success === true && snovResult?.id) {\n  // Successfully added\n  snovId = snovResult.id;\n  snovStatus = 'Added \\u2705';\n} else if (\n  snovResult?.error?.message?.includes('already exists') ||\n  (typeof snovResult?.errors === 'string' && snovResult.errors.includes('already exists'))\n) {\n  // Already in list \\u2014 still treat as success\n  snovStatus = 'Already in list \\u2705';\n} else {\n  // Real error\n  snovStatus = `Error: ${JSON.stringify(snovResult?.errors || snovResult?.message || 'unknown')}`;\n}\n\n// Build profile URL only if we have a real ID\nconst snovProfileUrl = snovId\n  ? `https://app.snov.io/prospects/view/${snovId}/${leadData.listId}`\n  : '';\n\n// Success if added or already exists\nconst success = snovStatus.includes('\\u2705');\n\nreturn [{\n  json: {\n    pageId: leadData.pageId,\n    icp: leadData.icp,\n    email: leadData.email,\n    snov_profile_url: snovProfileUrl,\n    snov_status: snovStatus,\n    emailTemplate,\n    today,\n    success\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3420,
+        0
+      ],
+      "id": "e3532acf-1f51-421a-8a18-e8987614bc7e",
+      "name": "Prepare Notion Update"
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "operation": "update",
+        "pageId": {
+          "__rl": true,
+          "value": "={{ $json.pageId }}",
+          "mode": "id"
+        },
+        "propertiesUi": {
+          "propertyValues": [
+            {
+              "key": "Status|select",
+              "selectValue": "Qualified (Snov.io Added)"
+            },
+            {
+              "key": "Email Template Sent|select",
+              "selectValue": "={{ $json.emailTemplate }}"
+            },
+            {
+              "key": "Date Contacted|date",
+              "date": "={{ $json.today }}"
+            },
+            {
+              "key": "Agent (3.0) Note|rich_text",
+              "textContent": "={{ $json.snov_status }}"
+            },
+            {
+              "key": "Snov Profile URL|rich_text",
+              "textContent": "={{ $json.snov_profile_url }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2.2,
+      "position": [
+        3800,
+        0
+      ],
+      "id": "c2d6d22b-8cd9-45ed-a767-f229fdbe1e50",
+      "name": "Update Lead in Notion",
+      "credentials": {
+        "notionApi": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Notion account-CBL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        4180,
+        0
+      ],
+      "id": "8db238a0-f04f-420b-8310-cefdc8576a40",
+      "name": "Loop Back"
+    },
+    {
+      "parameters": {
+        "jsCode": "const parseData = $('Prepare Leads List').first().json;\nreturn [{\n  json: {\n    total: parseData.total,\n    runDate: new Date().toISOString().split('T')[0]\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4940,
+        0
+      ],
+      "id": "a4419163-4f97-46b0-b128-1c8cd0ae219c",
+      "name": "Prepare Summary"
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "YOUR_SLACK_CHANNEL_ID",
+          "mode": "list",
+          "cachedResultName": "your-slack-channel"
+        },
+        "text": "=✅ *Agent 3 — Snov.io Prospect Adder Complete*\n📅 Date: {{ $json.runDate }}\n📊 Total prospects added: {{ $json.total }}\n\n👉 <https://notion.so/YOUR_DATABASE_ID|Review in Notion>\n🎯 <https://app.snov.io/prospects|Review in Snov.io>",
+        "otherOptions": {
+          "includeLinkToWorkflow": false
+        }
+      },
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.4,
+      "position": [
+        5320,
+        0
+      ],
+      "id": "3738d40e-fe17-40dc-9fc9-21ee0c97c3a5",
+      "name": "Slack Summary",
+      "credentials": {
+        "slackApi": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Slack Bot Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "select": "user",
+        "user": {
+          "__rl": true,
+          "value": "UEJR5LKSB",
+          "mode": "list",
+          "cachedResultName": "your-slack-channel"
+        },
+        "text": "=⚠️ *Agent 3 — No leads to process*\n📅 Date: {{ $now.toFormat('dd MMM yyyy') }}\n\nNo leads with Status = Qualified (Email Found).\nWait for Agent 2 to find emails first.",
+        "otherOptions": {
+          "includeLinkToWorkflow": false
+        }
+      },
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.4,
+      "position": [
+        1520,
+        0
+      ],
+      "id": "1f4a81bb-eb61-44ed-b548-a7d673934d9d",
+      "name": "Slack No Leads",
+      "credentials": {
+        "slackApi": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Slack account-PERSONAL"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        4560,
+        0
+      ],
+      "id": "7296c27b-248c-4e1a-8893-539413f7c1c7",
+      "name": "Wait"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 2
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        0,
+        220
+      ],
+      "id": "e3a5bb5a-d165-4694-ae9e-d6157becb511",
+      "name": "Daily Schedule - 2AM"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Read Qualified Email Found Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Qualified Email Found Leads": {
+      "main": [
+        [
+          {
+            "node": "Prepare Leads List",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Leads List": {
+      "main": [
+        [
+          {
+            "node": "Any Leads?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Any Leads?": {
+      "main": [
+        [
+          {
+            "node": "Slack No Leads",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Split Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Leads": {
+      "main": [
+        [
+          {
+            "node": "Loop One by One",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop One by One": {
+      "main": [
+        [
+          {
+            "node": "Prepare Summary",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get Snov.io Token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Snov.io Token": {
+      "main": [
+        [
+          {
+            "node": "Add Prospect to Snov.io List",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add Prospect to Snov.io List": {
+      "main": [
+        [
+          {
+            "node": "Prepare Notion Update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Notion Update": {
+      "main": [
+        [
+          {
+            "node": "Update Lead in Notion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Lead in Notion": {
+      "main": [
+        [
+          {
+            "node": "Loop Back",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Back": {
+      "main": [
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Summary": {
+      "main": [
+        [
+          {
+            "node": "Slack Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "Loop One by One",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Daily Schedule - 2AM": {
+      "main": [
+        [
+          {
+            "node": "Read Qualified Email Found Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false,
+    "timeSavedMode": "fixed",
+    "errorWorkflow": "GD1hZJmfeqPB6b5J",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "meta": {
+    "instanceId": "89282cf319585d0a7a52670a5b93095ddc119ae917543dc2b718c88da03e0ac1"
+  },
+  "tags": [
+    {
+      "updatedAt": "2026-06-06T08:53:21.710Z",
+      "createdAt": "2026-06-06T08:53:21.710Z",
+      "id": "9yiUjPam0oBpuHFY",
+      "name": "Notion"
+    },
+    {
+      "updatedAt": "2026-06-06T08:53:12.274Z",
+      "createdAt": "2026-06-06T08:53:12.274Z",
+      "id": "DvSFBji689V1JZU5",
+      "name": "Snov.io"
+    }
+  ]
+}

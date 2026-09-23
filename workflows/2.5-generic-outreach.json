@@ -1,0 +1,972 @@
+{
+  "name": "Agent 2.5 — Generic Outreach (Snov.io Verified)",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## 1. Trigger & Load Candidates\nRuns twice daily or manually. Picks a safe role-based address\n(info@, contact@, etc.) per lead.",
+        "height": 480,
+        "width": 1860,
+        "color": 4
+      },
+      "id": "sticky-1-trigger-&-load-candidates",
+      "name": "1. Trigger & Load Candidates",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -50,
+        -110
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 2. Loop & Check for a Candidate Email\nSkips leads with no usable generic address.",
+        "height": 260,
+        "width": 1860,
+        "color": 5
+      },
+      "id": "sticky-2-loop-&-check-for-a-candidate-email",
+      "name": "2. Loop & Check for a Candidate Email",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1850,
+        -110
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 3. Verify the Email is Real\nSMTP-verifies the mailbox via Snov.io before anything gets\nsent — no email goes to an address that might bounce.",
+        "height": 260,
+        "width": 2620,
+        "color": 6
+      },
+      "id": "sticky-3-verify-the-email-is-real",
+      "name": "3. Verify the Email is Real",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        3750,
+        -110
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 4. Send Email & Update Status\nSends via Gmail with a rotating subject line, then waits 60s\nbefore the next lead to stay clear of rate limits.",
+        "height": 480,
+        "width": 1100,
+        "color": 3
+      },
+      "id": "sticky-4-send-email-&-update-status",
+      "name": "4. Send Email & Update Status",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        6410,
+        -110
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 5. Report to Slack\nPosts how many outreach emails were sent this run.",
+        "height": 260,
+        "width": 720,
+        "color": 7
+      },
+      "id": "sticky-5-report-to-slack",
+      "name": "5. Report to Slack",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        7550,
+        -110
+      ]
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "823192c7-2e4a-41f9-afbf-38c7dccadf8d",
+      "name": "Manual Trigger"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 11
+            },
+            {
+              "triggerAtHour": 18
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        0,
+        220
+      ],
+      "id": "ad8fc7fa-94c7-4103-b9d9-f9a1e6325368",
+      "name": "Daily Schedule - 11AM"
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "operation": "getAll",
+        "databaseId": {
+          "__rl": true,
+          "value": "YOUR_NOTION_DATABASE_ID",
+          "mode": "id"
+        },
+        "limit": 20,
+        "simple": false,
+        "filterType": "manual",
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "key": "2.5 Sent|select",
+              "condition": "equals",
+              "selectValue": "Qualified"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2.2,
+      "position": [
+        380,
+        0
+      ],
+      "id": "a4dc5f8c-f4d9-49e5-ab9d-030fa37cd93d",
+      "name": "Read Qualified Leads (2.5)",
+      "credentials": {
+        "notionApi": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Notion account-CBL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generic/role-based email patterns we consider safe for outreach\nconst GENERIC_PREFIXES = ['info','contact','hello','hi','support','admin','office','enquiries','enquiry','inquiries','hr','help','team','mail','general'];\n\nfunction isGeneric(email) {\n  if (!email || !email.includes('@')) return false;\n  const user = email.split('@')[0].toLowerCase();\n  return GENERIC_PREFIXES.some(p => user === p || user.startsWith(p + '.') || user.startsWith(p + '_') || user.startsWith(p + '-'));\n}\n\nfunction scorePrefix(email) {\n  const user = email.split('@')[0].toLowerCase();\n  const order = ['info','contact','hello','hi','enquiries','enquiry','inquiries','support','admin','office','team','mail','general','hr','help'];\n  for (let i = 0; i < order.length; i++) {\n    if (user === order[i] || user.startsWith(order[i] + '.') || user.startsWith(order[i] + '_') || user.startsWith(order[i] + '-')) return order.length - i;\n  }\n  return 0;\n}\n\n// Try to pull a Get Domain Emails list out of the Snovio Response log text\nfunction extractDomainEmails(snovioLog, domain) {\n  if (!snovioLog) return [];\n  const found = new Set();\n  // crude email regex scoped loosely to the lead's domain when possible\n  const re = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}/g;\n  const matches = snovioLog.match(re) || [];\n  for (const m of matches) {\n    const lower = m.toLowerCase();\n    if (!domain || lower.endsWith('@' + domain.toLowerCase())) {\n      found.add(lower);\n    }\n  }\n  return Array.from(found);\n}\n\nconst items = $input.all();\nif (!items || items.length === 0) return [{ json: { noLeads: true, total: 0 } }];\n\nconst leads = items.map(item => {\n  const props = item.json.properties || {};\n  const getTitle = (p) => (!p || !p.title || !p.title.length) ? '' : p.title.map(t => t.plain_text).join('');\n  const getRichText = (p) => (!p || !p.rich_text || !p.rich_text.length) ? '' : p.rich_text.map(t => t.plain_text).join('');\n\n  const pageId = item.json.id;\n  const websiteUrl = getTitle(props['Website URL']);\n  const websiteEmailRaw = getRichText(props['Website Email']);\n  const otherContacts = getRichText(props['Other Contacts']);\n  const snovioResponse = getRichText(props['Snovio Response']);\n\n  let domain = '';\n  try {\n    const url = websiteUrl.startsWith('http') ? websiteUrl : 'https://' + websiteUrl;\n    domain = new URL(url).hostname.replace('www.', '');\n  } catch (e) {\n    domain = websiteUrl.replace(/https?:\\/\\/(www\\.)?/, '').split('/')[0];\n  }\n  domain = domain.replace(/\\/$/, '');\n\n  // ── Step 1: candidates from Website Email field (could be comma/semicolon/space separated) ──\n  const websiteEmails = websiteEmailRaw\n    .split(/[,;\\s]+/)\n    .map(e => e.trim().toLowerCase())\n    .filter(e => e.includes('@'));\n\n  let candidate = null;\n  let candidateSource = '';\n\n  if (websiteEmails.length) {\n    // prefer generic-style addresses, otherwise the highest-scoring / first one\n    const genericOnes = websiteEmails.filter(isGeneric);\n    const pool = genericOnes.length ? genericOnes : websiteEmails;\n    pool.sort((a, b) => scorePrefix(b) - scorePrefix(a));\n    candidate = pool[0];\n    candidateSource = 'Website Email';\n  }\n\n  // ── Step 2: fallback to Snovio Response domain emails list ──\n  if (!candidate) {\n    const domainEmails = extractDomainEmails(snovioResponse, domain);\n    const genericOnes = domainEmails.filter(isGeneric);\n    const pool = genericOnes.length ? genericOnes : [];\n    pool.sort((a, b) => scorePrefix(b) - scorePrefix(a));\n    if (pool.length) {\n      candidate = pool[0];\n      candidateSource = 'Snovio Response';\n    }\n  }\n\n  return {\n    pageId,\n    website_url: websiteUrl,\n    domain,\n    other_contacts: otherContacts,\n    candidate_email: candidate || '',\n    candidate_source: candidateSource\n  };\n});\n\nif (!leads.length) return [{ json: { noLeads: true, total: 0 } }];\nreturn [{ json: { noLeads: false, leads, total: leads.length } }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        760,
+        0
+      ],
+      "id": "59b76520-0d5d-4d9f-a4f5-4ff9da6b2d7d",
+      "name": "Prepare Leads & Pick Candidate"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "no-leads-check",
+              "leftValue": "={{ $json.noLeads }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1140,
+        0
+      ],
+      "id": "eecbf347-6ed4-4455-b9bc-e737fbe51d2e",
+      "name": "Any Leads?"
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "YOUR_SLACK_CHANNEL_ID",
+          "mode": "list",
+          "cachedResultName": "your-slack-channel"
+        },
+        "text": "=⚠️ *Agent 2.5 — No leads to process*\n📅 Date: {{ $now.toFormat('dd MMM yyyy') }}\n\nNo rows with 2.5 Sent = Qualified.",
+        "otherOptions": {}
+      },
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.4,
+      "position": [
+        1520,
+        0
+      ],
+      "id": "1c371f7d-7d51-460b-8fa8-dc249600eb82",
+      "name": "Slack No Leads",
+      "credentials": {
+        "slackApi": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Slack account-PERSONAL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "leads",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        1900,
+        0
+      ],
+      "id": "9dc65934-7bf7-4aa6-974e-cae7da016cea",
+      "name": "Split Leads"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        2280,
+        0
+      ],
+      "id": "b8d3954c-cf49-432a-af57-ce952742a166",
+      "name": "Loop One by One"
+    },
+    {
+      "parameters": {
+        "jsCode": "const prepare = $('Prepare Leads & Pick Candidate').first().json;\nreturn [{ json: { total: prepare.total, runDate: new Date().toISOString().split('T')[0] } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        7600,
+        0
+      ],
+      "id": "d7ee3a3b-b710-463a-a1aa-c7cbcabd2ee9",
+      "name": "Prepare Summary"
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "YOUR_SLACK_CHANNEL_ID",
+          "mode": "list",
+          "cachedResultName": "your-slack-channel"
+        },
+        "text": "=✅ *Agent 2.5 — Generic Outreach Complete*\n📅 Date: {{ $json.runDate }}\n📊 Total leads processed: {{ $json.total }}\n\n👉 <https://notion.so/YOUR_DATABASE_ID|Review in Notion>",
+        "otherOptions": {
+          "includeLinkToWorkflow": false
+        }
+      },
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.4,
+      "position": [
+        7980,
+        0
+      ],
+      "id": "5a4d541e-b51a-474c-9882-f429044ddf15",
+      "name": "Slack Summary",
+      "credentials": {
+        "slackApi": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Slack Bot Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "has-candidate-check",
+              "leftValue": "={{ $json.candidate_email }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2660,
+        0
+      ],
+      "id": "846265ea-b1b6-4250-acfc-13fcc9cc3a19",
+      "name": "Has Candidate Email?"
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "operation": "update",
+        "pageId": {
+          "__rl": true,
+          "value": "={{ $json.pageId }}",
+          "mode": "id"
+        },
+        "propertiesUi": {
+          "propertyValues": [
+            {
+              "key": "2.5 Sent|select",
+              "selectValue": "No"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2.2,
+      "position": [
+        3040,
+        0
+      ],
+      "id": "d49f9a0f-71a4-4e68-9e2c-6a7ba850bb4f",
+      "name": "Mark No - No Candidate",
+      "credentials": {
+        "notionApi": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Notion account-CBL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.snov.io/v1/oauth/access_token",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"grant_type\": \"client_credentials\",\n  \"client_id\": \"YOUR_SNOV_CLIENT_ID\",\n  \"client_secret\": \"YOUR_SNOV_CLIENT_SECRET\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        3800,
+        0
+      ],
+      "id": "f89852d3-ee10-4d8e-b465-3f37d4dc83e5",
+      "name": "Get Snov.io Token",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.snov.io/v2/email-verification/start",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $json.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"emails\": [\"{{ $('Loop One by One').first().json.candidate_email }}\"]\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        4180,
+        0
+      ],
+      "id": "fd4d4f9b-2c23-4638-b643-9025b2ec6909",
+      "name": "Start Email Verification",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "url": "=https://api.snov.io/v2/email-verification/result?task_hash={{ $('Start Email Verification').first().json.data.task_hash }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Get Snov.io Token').first().json.access_token }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        4940,
+        0
+      ],
+      "id": "7ea8403a-17a3-42e3-919c-76c383c684a5",
+      "name": "Get Verification Result",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const result = $input.first().json;\nconst lead = $('Loop One by One').first().json;\n\nconst data = (result.data || [])[0] || {};\nconst smtpStatus = data?.result?.smtp_status || 'not_valid';\nconst reason = data?.result?.unknown_status_reason || '';\n\nconst isValid = smtpStatus === 'valid';\n\nreturn [{ json: {\n  pageId: lead.pageId,\n  website_url: lead.website_url,\n  domain: lead.domain,\n  candidate_email: lead.candidate_email,\n  candidate_source: lead.candidate_source,\n  smtp_status: smtpStatus,\n  unknown_status_reason: reason,\n  is_valid: isValid\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5700,
+        0
+      ],
+      "id": "66bab6c0-0467-4b5c-9aaa-5b14d515710f",
+      "name": "Evaluate Verification"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "is-valid-check",
+              "leftValue": "={{ $json.is_valid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        6080,
+        0
+      ],
+      "id": "00dc3e0d-7c85-4fd4-bed9-1dbe2a9464ea",
+      "name": "Email Valid?"
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.candidate_email }}",
+        "subject": "={{ ['Subject line option 1', 'Subject line option 2', 'Subject line option 3'][Math.floor(Math.random()*3)] }}",
+        "message": "=<p>Hi,</p>\n\n<p>[EDIT: one sentence naming the specific problem your product solves for this ICP — be concrete, not generic.]</p>\n\n<p>[Your Product Name] fixes that. [One sentence on how.]</p>\n\n<p>If that's a problem on your site, here's how it works: <a href=\"https://example.com/your-product?utm_source=generalemail&utm_medium=gmail&utm_campaign=info_outreach\">example.com/your-product</a></p>\n\n<p>[Your Name]<br>[Your Title], [Your Company]</p>",
+        "options": {
+          "appendAttribution": false,
+          "senderName": "[Your Company]"
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        6460,
+        0
+      ],
+      "id": "3b24ff7a-6c3f-4cb7-9ac7-6511711ab78e",
+      "name": "Send Generic Outreach Email",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Gmail (Your Outreach Account)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "operation": "update",
+        "pageId": {
+          "__rl": true,
+          "value": "={{ $('Evaluate Verification').first().json.pageId }}",
+          "mode": "id"
+        },
+        "propertiesUi": {
+          "propertyValues": [
+            {
+              "key": "2.5 Email|rich_text",
+              "textContent": "={{ $('Evaluate Verification').first().json.candidate_email }}"
+            },
+            {
+              "key": "2.5 Sent|select",
+              "selectValue": "Yes"
+            },
+            {
+              "key": "2.5 Date Sent|date",
+              "date": "={{ new Date().toISOString() }}",
+              "timezone": "Asia/Dhaka"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2.2,
+      "position": [
+        6840,
+        0
+      ],
+      "id": "b66fc260-baaf-4d60-87bc-071579760652",
+      "name": "Mark Yes - Sent",
+      "credentials": {
+        "notionApi": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Notion account-CBL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "operation": "update",
+        "pageId": {
+          "__rl": true,
+          "value": "={{ $json.pageId }}",
+          "mode": "id"
+        },
+        "propertiesUi": {
+          "propertyValues": [
+            {
+              "key": "2.5 Email|rich_text",
+              "textContent": "={{ $json.candidate_email }}"
+            },
+            {
+              "key": "2.5 Sent|select",
+              "selectValue": "No"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2.2,
+      "position": [
+        6460,
+        220
+      ],
+      "id": "23aafe5d-9511-47e4-a03e-1f4b1c14560b",
+      "name": "Mark No - Invalid Email",
+      "credentials": {
+        "notionApi": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Notion account-CBL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        3420,
+        0
+      ],
+      "id": "3477671e-b546-4c31-a790-825183cb7839",
+      "name": "Loop Back"
+    },
+    {
+      "parameters": {
+        "amount": "={{ Math.floor(Math.random() * 271) + 90 }}"
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        7220,
+        0
+      ],
+      "id": "0e1abe5c-8e17-44d4-8197-e507cc304887",
+      "name": "Wait 60"
+    },
+    {
+      "parameters": {
+        "amount": 30
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        4560,
+        0
+      ],
+      "id": "d6443967-0ef9-47c8-9415-5c32ebb0964b",
+      "name": "Wait 30s"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "64b12bfc-beb5-4929-bee9-0994dcae5e8c",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "completed",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        5320,
+        0
+      ],
+      "id": "6bb2de6f-651d-423b-b6c0-c1fd201a626e",
+      "name": "IfComplete"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Read Qualified Leads (2.5)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Daily Schedule - 11AM": {
+      "main": [
+        [
+          {
+            "node": "Read Qualified Leads (2.5)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Qualified Leads (2.5)": {
+      "main": [
+        [
+          {
+            "node": "Prepare Leads & Pick Candidate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Leads & Pick Candidate": {
+      "main": [
+        [
+          {
+            "node": "Any Leads?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Any Leads?": {
+      "main": [
+        [
+          {
+            "node": "Slack No Leads",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Split Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Leads": {
+      "main": [
+        [
+          {
+            "node": "Loop One by One",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop One by One": {
+      "main": [
+        [
+          {
+            "node": "Prepare Summary",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Has Candidate Email?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Summary": {
+      "main": [
+        [
+          {
+            "node": "Slack Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Candidate Email?": {
+      "main": [
+        [
+          {
+            "node": "Get Snov.io Token",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark No - No Candidate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark No - No Candidate": {
+      "main": [
+        [
+          {
+            "node": "Loop Back",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Snov.io Token": {
+      "main": [
+        [
+          {
+            "node": "Start Email Verification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start Email Verification": {
+      "main": [
+        [
+          {
+            "node": "Wait 30s",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Verification Result": {
+      "main": [
+        [
+          {
+            "node": "IfComplete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evaluate Verification": {
+      "main": [
+        [
+          {
+            "node": "Email Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email Valid?": {
+      "main": [
+        [
+          {
+            "node": "Send Generic Outreach Email",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark No - Invalid Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Generic Outreach Email": {
+      "main": [
+        [
+          {
+            "node": "Mark Yes - Sent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Yes - Sent": {
+      "main": [
+        [
+          {
+            "node": "Wait 60",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark No - Invalid Email": {
+      "main": [
+        [
+          {
+            "node": "Loop Back",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Back": {
+      "main": [
+        [
+          {
+            "node": "Loop One by One",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 60": {
+      "main": [
+        [
+          {
+            "node": "Loop Back",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 30s": {
+      "main": [
+        [
+          {
+            "node": "Get Verification Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IfComplete": {
+      "main": [
+        [
+          {
+            "node": "Evaluate Verification",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait 30s",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "89282cf319585d0a7a52670a5b93095ddc119ae917543dc2b718c88da03e0ac1"
+  },
+  "tags": [
+    {
+      "updatedAt": "2026-06-06T08:53:21.710Z",
+      "createdAt": "2026-06-06T08:53:21.710Z",
+      "id": "9yiUjPam0oBpuHFY",
+      "name": "Notion"
+    },
+    {
+      "updatedAt": "2026-06-13T05:05:05.594Z",
+      "createdAt": "2026-06-13T05:05:05.594Z",
+      "id": "CkiWg5XJQxXQy6kz",
+      "name": "Gmail"
+    },
+    {
+      "updatedAt": "2026-06-06T08:53:12.274Z",
+      "createdAt": "2026-06-06T08:53:12.274Z",
+      "id": "DvSFBji689V1JZU5",
+      "name": "Snov.io"
+    }
+  ]
+}

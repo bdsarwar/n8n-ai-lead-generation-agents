@@ -1,0 +1,977 @@
+{
+  "name": "Agent 2 — Email Finder (Snov.io)",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## 1. Trigger & Load Qualified Leads\nRuns nightly or manually. Pulls every verified lead that hasn't\nhad an email-finder pass yet.",
+        "height": 480,
+        "width": 1860,
+        "color": 4
+      },
+      "id": "sticky-1-trigger-&-load-qualified-leads",
+      "name": "1. Trigger & Load Qualified Leads",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -50,
+        -110
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 2. Loop & Authenticate\nProcesses one lead at a time and refreshes the Snov.io OAuth\ntoken before each domain search.",
+        "height": 260,
+        "width": 1100,
+        "color": 5
+      },
+      "id": "sticky-2-loop-&-authenticate",
+      "name": "2. Loop & Authenticate",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1850,
+        -110
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 3. Snov.io Domain Search\nPulls every known email at the domain plus a list of people\nwho work there, with job titles.",
+        "height": 260,
+        "width": 3380,
+        "color": 6
+      },
+      "id": "sticky-3-snovio-domain-search",
+      "name": "3. Snov.io Domain Search",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2990,
+        -110
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 4. Pick Best Contact & Save\nScores job titles — webmasters and office managers outrank\nCEOs — and writes the best contact back to Notion.",
+        "height": 480,
+        "width": 1480,
+        "color": 3
+      },
+      "id": "sticky-4-pick-best-contact-&-save",
+      "name": "4. Pick Best Contact & Save",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        6410,
+        -110
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 5. Report to Slack\nPosts how many leads were processed and how many got an email.",
+        "height": 260,
+        "width": 720,
+        "color": 7
+      },
+      "id": "sticky-5-report-to-slack",
+      "name": "5. Report to Slack",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        7930,
+        -110
+      ]
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "037cfa86-8f60-4bb8-981b-241aeba1eb3c",
+      "name": "Manual Trigger"
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "operation": "getAll",
+        "databaseId": {
+          "__rl": true,
+          "value": "YOUR_NOTION_DATABASE_ID",
+          "mode": "id"
+        },
+        "returnAll": true,
+        "simple": false,
+        "filterType": "manual",
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "key": "Status|select",
+              "condition": "equals",
+              "selectValue": "Qualified"
+            },
+            {
+              "key": "Snovio Checked|checkbox",
+              "condition": "equals"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2.2,
+      "position": [
+        380,
+        0
+      ],
+      "id": "3cb535e6-ca7c-4550-a7cf-f26d4e1b7daa",
+      "name": "Read Qualified Leads",
+      "credentials": {
+        "notionApi": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Notion account-CBL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nif (!items || items.length === 0) return [{ json: { noLeads: true, total: 0 } }];\n\nconst leads = items.map(item => {\n  const props = item.json.properties || {};\n  const getTitle = (p) => (!p || !p.title || !p.title.length) ? '' : p.title.map(t => t.plain_text).join('');\n  const getSelect = (p) => (!p || !p.select) ? '' : p.select.name || '';\n  const websiteUrl = getTitle(props['Website URL']);\n  let domain = '';\n  try {\n    const url = websiteUrl.startsWith('http') ? websiteUrl : 'https://' + websiteUrl;\n    domain = new URL(url).hostname.replace('www.', '');\n  } catch(e) {\n    domain = websiteUrl.replace(/https?:\\/\\/(www\\.)?/, '').split('/')[0];\n  }\n  return { pageId: item.json.id, website_url: websiteUrl, domain: domain.replace(/\\/$/, ''), icp: getSelect(props['ICP']) };\n}).filter(l => l.domain);\n\nif (!leads.length) return [{ json: { noLeads: true, total: 0 } }];\nreturn [{ json: { noLeads: false, leads, total: leads.length } }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        760,
+        0
+      ],
+      "id": "e682077b-1d7f-44a0-80c0-9313dc4baa65",
+      "name": "Prepare Leads List"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "no-leads-check",
+              "leftValue": "={{ $json.noLeads }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1140,
+        0
+      ],
+      "id": "e70be3dc-8eef-4cf5-94c3-20cbeaa06b37",
+      "name": "Any Leads?"
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "leads",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        1900,
+        0
+      ],
+      "id": "67a84643-a714-4a65-9c64-5b23920da27c",
+      "name": "Split Leads"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        2280,
+        0
+      ],
+      "id": "82f0d6b2-82b5-4301-86ae-e6ea0547c9c7",
+      "name": "Loop One by One"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.snov.io/v1/oauth/access_token",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"grant_type\": \"client_credentials\",\n  \"client_id\": \"YOUR_SNOV_CLIENT_ID\",\n  \"client_secret\": \"YOUR_SNOV_CLIENT_SECRET\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2660,
+        0
+      ],
+      "id": "96d66a60-66db-49ec-9fde-a3629e9c52c8",
+      "name": "Get Snov.io Token",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.snov.io/v2/domain-search/start",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $json.access_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"domain\": \"{{ $('Loop One by One').first().json.domain }}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        3040,
+        0
+      ],
+      "id": "479c1dc4-bd67-4ce0-8233-c2f152405bbe",
+      "name": "Start Domain Search",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        3420,
+        0
+      ],
+      "id": "67a76f92-08b5-4eeb-9628-26a7aac9c0a3",
+      "name": "Wait 5s"
+    },
+    {
+      "parameters": {
+        "url": "=https://api.snov.io/v2/domain-search/result/{{ $('Start Domain Search').first().json.meta.task_hash }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Get Snov.io Token').first().json.access_token }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        3800,
+        0
+      ],
+      "id": "c85a66cf-c037-4793-90b7-8bb3b30852b3",
+      "name": "Get Domain Info",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Get Domain Info').first().json.links.domain_emails }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Get Snov.io Token').first().json.access_token }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        4180,
+        0
+      ],
+      "id": "20d20367-ea25-46e2-a90d-fd20364b39d3",
+      "name": "Start Domain Emails",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        4560,
+        0
+      ],
+      "id": "28f14f5e-e35c-4d5a-9bbc-aa3e8809c1fd",
+      "name": "Wait 5s for Emails"
+    },
+    {
+      "parameters": {
+        "url": "={{ $('Start Domain Emails').first().json.links.result }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Get Snov.io Token').first().json.access_token }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        4940,
+        0
+      ],
+      "id": "6c58a899-04b8-4595-a582-e1a2746dea93",
+      "name": "Get Domain Emails",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Get Domain Info').first().json.links.prospects }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Get Snov.io Token').first().json.access_token }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        5320,
+        0
+      ],
+      "id": "fc49a978-1dee-40ae-9a4d-48accc724057",
+      "name": "Start Prospects Search",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        5700,
+        0
+      ],
+      "id": "10ea0b3c-6526-41f9-a590-0ba229491e17",
+      "name": "Wait 5s for Prospects"
+    },
+    {
+      "parameters": {
+        "url": "=https://api.snov.io/v2/domain-search/prospects/result/{{ $('Start Prospects Search').first().json.meta.task_hash }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Get Snov.io Token').first().json.access_token }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        6080,
+        0
+      ],
+      "id": "ee62c051-f36a-4523-9faa-c0f639a26b8b",
+      "name": "Get Prospects",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const emailsResult = $('Get Domain Emails').first().json;\nconst prospectsResult = $('Get Prospects').first().json;\nconst domainInfo = $('Get Domain Info').first().json;\nconst leadData = $('Loop One by One').first().json;\n\nconst pageId = leadData.pageId;\nconst websiteUrl = leadData.website_url;\nconst domain = leadData.domain;\n\n// ── Domain info summary ──\nconst companyName = domainInfo?.data?.company_name || '';\nconst industry = domainInfo?.data?.industry || '';\nconst size = domainInfo?.data?.size || '';\nconst emailsCount = domainInfo?.meta?.emails_count || 0;\nconst prospectsCount = domainInfo?.meta?.prospects_count || 0;\nconst domainInfoLine = `Get Domain Info: Company=${companyName || 'N/A'} | Industry=${industry || 'N/A'} | Size=${size || 'N/A'} | Emails=${emailsCount} | Prospects=${prospectsCount}`;\n\n// ── Raw data ──\nconst emails = emailsResult?.data || [];\nconst prospects = prospectsResult?.data || [];\n\n// ── Log emails list ──\nconst emailsList = emails.slice(0, 15).map(e => e.email).join(', ');\nconst emailsLogLine = `Get Domain Emails: ${emails.length} total — ${emailsList}${emails.length > 15 ? '...' : ''}`;\n\n// ── Log prospects list ──\nconst prospectsList = prospects.slice(0, 5).map(p => `${p.first_name} ${p.last_name} (${p.position || 'N/A'})`).join(', ');\nconst prospectsLogLine = `Get Prospects: ${prospects.length} total — ${prospectsList}${prospects.length > 5 ? '...' : ''}`;\n\n// ── No data at all ──\nif (!emails.length && !prospects.length) {\n  const log = `Domain: ${domain}\\n${domainInfoLine}\\n${emailsLogLine}\\n${prospectsLogLine}\\nResult: Domain not found in Snov.io database`;\n  return [{ json: {\n    pageId,\n    website_url: websiteUrl,\n    best_email: null,\n    best_name: '',\n    best_position: '',\n    other_contacts: '',\n    snovio_log: log,\n    agent_note: 'Domain not found in Snov.io database',\n    email_found: false,\n    company_name: companyName,\n    company_industry: industry,\n    company_size: size\n  } }];\n}\n\n// ── Title scoring (EDIT: tune this scoring for your own ICP) ──\nconst seniorTitles = [\n  'webmaster','web manager','web administrator',\n  'it manager','it director','systems administrator','sysadmin',\n  'digital manager','digital coordinator',\n  'administrator','office administrator','office manager',\n  'registrar','enrollment','communications manager',\n  'operations manager','coordinator','content manager',\n  'marketing manager','marketing coordinator',\n  'director','managing director','executive director',\n  'manager'\n];\nconst midTitles = [\n  'ceo','chief executive','founder','co-founder','cofounder',\n  'owner','president','principal','chancellor','vice-chancellor',\n  'vp','vice president','head of','chief','md','officer','controller'\n];\n\nfunction scoreTitle(position) {\n  const pos = (position || '').toLowerCase();\n  for (let i = 0; i < seniorTitles.length; i++) if (pos.includes(seniorTitles[i])) return 100 - i;\n  for (let i = 0; i < midTitles.length; i++) if (pos.includes(midTitles[i])) return 50 - i;\n  return 1;\n}\n\n// ── Username score fallback (EDIT: tune this scoring for your own ICP) ──\nfunction scoreUsername(username) {\n  const u = username.toLowerCase();\n  const roleScores = [\n    ['webmaster',95],['webadmin',93],['web',88],\n    ['it',85],['sysadmin',83],['systems',80],\n    ['digital',78],['admin',75],['administrator',75],\n    ['registrar',72],['enrollment',70],['office',68],\n    ['communications',65],['coordinator',63],['operations',60],\n    ['info',55],['contact',50],['enquiries',48],['hello',45],\n    ['marketing',42],['manager',40],\n    ['support',20],['library',10],['forms',8],['graduation',5],\n    ['ceo',15],['president',15],['director',20],['founder',12],\n    ['principal',18],['chancellor',18]\n  ];\n  for (const [role, score] of roleScores) {\n    if (u === role || u.startsWith(role + '.') || u.startsWith(role + '_')) return score;\n  }\n  return 25;\n}\n\n// ── Cross-reference emails with prospects ──\nconst matchedContacts = [];\nconst unmatchedEmails = [];\n\nfor (const emailObj of emails) {\n  const email = emailObj.email || '';\n  if (!email) continue;\n  const username = email.split('@')[0].toLowerCase();\n\n  let matched = null;\n  let bestMatchScore = 0;\n\n  for (const p of prospects) {\n    const firstName = (p.first_name || '').toLowerCase().replace(/[^a-z]/g, '');\n    const lastName = (p.last_name || '').toLowerCase().replace(/[^a-z]/g, '');\n    const firstInitial = firstName.charAt(0);\n\n    const patterns = [\n      firstInitial + lastName,\n      firstName + lastName,\n      firstName + '.' + lastName,\n      firstName + '_' + lastName,\n      lastName + firstInitial,\n      lastName + '.' + firstName,\n      firstName,\n      lastName,\n      firstInitial + '.' + lastName,\n    ];\n\n    if (patterns.includes(username)) {\n      const score = scoreTitle(p.position);\n      if (score > bestMatchScore) {\n        bestMatchScore = score;\n        matched = p;\n      }\n    }\n  }\n\n  if (matched) {\n    matchedContacts.push({\n      email,\n      firstName: matched.first_name || '',\n      lastName: matched.last_name || '',\n      position: matched.position || '',\n      score: scoreTitle(matched.position)\n    });\n  } else {\n    unmatchedEmails.push({ email, score: scoreUsername(username) });\n  }\n}\n\n// ── Sort by score ──\nmatchedContacts.sort((a, b) => b.score - a.score);\nunmatchedEmails.sort((a, b) => b.score - a.score);\n\n// ── Build cross-reference log ──\nconst matchLog = matchedContacts.slice(0, 8).map(c => `  ${c.firstName} ${c.lastName} (${c.position}) → ${c.email} ✅`).join('\\n');\nconst noMatchNote = matchedContacts.length === 0 ? '  No matches found — using email scoring fallback' : '';\nconst crossRefLine = `Cross-Reference Matches (${matchedContacts.length} of ${emails.length} emails matched):\\n${matchLog || noMatchNote}`;\n\n// ── Pick best contact ──\nlet bestContact = null;\nlet otherContacts = [];\n\nif (matchedContacts.length > 0) {\n  bestContact = matchedContacts[0];\n  otherContacts = [\n    ...matchedContacts.slice(1).map(c => `${c.firstName} ${c.lastName} (${c.position}) - ${c.email}`),\n    ...unmatchedEmails.slice(0, 5).map(e => e.email)\n  ];\n} else if (unmatchedEmails.length > 0) {\n  const best = unmatchedEmails[0];\n  bestContact = { email: best.email, firstName: best.email.split('@')[0], lastName: '', position: 'Unknown' };\n  otherContacts = unmatchedEmails.slice(1, 10).map(e => e.email);\n}\n\nif (!bestContact) {\n  const log = `Domain: ${domain}\\n${domainInfoLine}\\n${emailsLogLine}\\n${prospectsLogLine}\\n${crossRefLine}\\nResult: No valid contacts found`;\n  return [{ json: {\n    pageId,\n    website_url: websiteUrl,\n    best_email: null,\n    best_name: '',\n    best_position: '',\n    other_contacts: '',\n    snovio_log: log,\n    agent_note: 'No valid contacts found',\n    email_found: false,\n    company_name: companyName,\n    company_industry: industry,\n    company_size: size\n  } }];\n}\n\nconst bestEmail = bestContact.email;\nconst bestName = [bestContact.firstName, bestContact.lastName].filter(Boolean).join(' ');\nconst bestPosition = bestContact.position || '';\nconst resultLine = `Result: Best contact — ${bestName}${bestPosition ? ' (' + bestPosition + ')' : ''} — ${bestEmail}`;\n\nconst fullLog = `Domain: ${domain}\\n${domainInfoLine}\\n${emailsLogLine}\\n${prospectsLogLine}\\n${crossRefLine}\\n${resultLine}`;\n\nreturn [{ json: {\n  pageId,\n  website_url: websiteUrl,\n  best_email: bestEmail,\n  best_name: bestName,\n  best_position: bestPosition,\n  other_contacts: otherContacts.slice(0, 10).join(', '),\n  snovio_log: fullLog,\n  agent_note: '',\n  email_found: true,\n  company_name: companyName,\n  company_industry: industry,\n  company_size: size\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6460,
+        0
+      ],
+      "id": "fc59769e-5e05-43e0-a0d4-8ff2a7baaad5",
+      "name": "Cross-Reference & Pick Best"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "email-found-check",
+              "leftValue": "={{ $json.email_found }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        6840,
+        0
+      ],
+      "id": "c68b12ea-6823-4bd7-b7ca-7244bc6dc129",
+      "name": "Email Found?"
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "operation": "update",
+        "pageId": {
+          "__rl": true,
+          "value": "={{ $json.pageId }}",
+          "mode": "id"
+        },
+        "propertiesUi": {
+          "propertyValues": [
+            {
+              "key": "Email|email",
+              "emailValue": "={{ $json.best_email }}"
+            },
+            {
+              "key": "Contact Name|rich_text",
+              "textContent": "={{ $json.best_name }}"
+            },
+            {
+              "key": "Other Contacts|rich_text",
+              "textContent": "={{ $json.other_contacts }}"
+            },
+            {
+              "key": "Snovio Response|rich_text",
+              "textContent": "={{ $json.snovio_log }}"
+            },
+            {
+              "key": "Snovio Checked|checkbox",
+              "checkboxValue": true
+            },
+            {
+              "key": "Agent (2.0) Note |rich_text",
+              "textContent": "={{ $json.agent_note }}"
+            },
+            {
+              "key": "Company|rich_text",
+              "textContent": "={{ $json.company_name }}"
+            },
+            {
+              "key": "Industry|select",
+              "selectValue": "={{ $json.company_industry }}"
+            },
+            {
+              "key": "Company Size|select",
+              "selectValue": "={{ $json.company_size }}"
+            },
+            {
+              "key": "Status|select",
+              "selectValue": "Qualified (Email Found)"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2.2,
+      "position": [
+        7220,
+        0
+      ],
+      "id": "681d5fe3-1bbf-43fd-9ec6-75c5d003b6ce",
+      "name": "Update Lead in Notion",
+      "credentials": {
+        "notionApi": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Notion account-CBL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "operation": "update",
+        "pageId": {
+          "__rl": true,
+          "value": "={{ $json.pageId }}",
+          "mode": "id"
+        },
+        "propertiesUi": {
+          "propertyValues": [
+            {
+              "key": "Snovio Response|rich_text",
+              "textContent": "={{ $json.snovio_log }}"
+            },
+            {
+              "key": "Agent (1.5) Note |rich_text",
+              "textContent": "={{ $json.agent_note }}"
+            },
+            {
+              "key": "Snovio Checked|checkbox",
+              "checkboxValue": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2.2,
+      "position": [
+        7220,
+        220
+      ],
+      "id": "834ab13f-1027-4140-a84e-8f57f60d09f3",
+      "name": "Update Lead in Notion Not Found",
+      "credentials": {
+        "notionApi": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Notion account-CBL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        7600,
+        0
+      ],
+      "id": "43a95236-c539-4ac7-ab6e-84abc3bfe642",
+      "name": "Loop Back"
+    },
+    {
+      "parameters": {
+        "jsCode": "const parseData = $('Prepare Leads List').first().json;\nreturn [{ json: { total: parseData.total, runDate: new Date().toISOString().split('T')[0] } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        7980,
+        0
+      ],
+      "id": "ed60278a-0480-4221-8fb9-5d7dbc2bc05f",
+      "name": "Prepare Summary"
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "YOUR_SLACK_CHANNEL_ID",
+          "mode": "list",
+          "cachedResultName": "your-slack-channel"
+        },
+        "text": "=✅ *Agent 2 — Email Finder Complete*\n📅 Date: {{ $json.runDate }}\n📊 Total leads processed: {{ $json.total }}\n\n👉 <https://notion.so/YOUR_DATABASE_ID|Review in Notion>",
+        "otherOptions": {
+          "includeLinkToWorkflow": false
+        }
+      },
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.4,
+      "position": [
+        8360,
+        0
+      ],
+      "id": "da17175d-eca7-4b5c-a9d6-042ac9ea1ad0",
+      "name": "Slack Summary",
+      "credentials": {
+        "slackApi": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Slack Bot Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "select": "user",
+        "user": {
+          "__rl": true,
+          "value": "UEJR5LKSB",
+          "mode": "list",
+          "cachedResultName": "your-slack-channel"
+        },
+        "text": "=⚠️ *Agent 2 — No leads to process*\n📅 Date: {{ $now.toFormat('dd MMM yyyy') }}\n\nNo Qualified leads with Snovio Checked = false.",
+        "otherOptions": {}
+      },
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.4,
+      "position": [
+        1520,
+        0
+      ],
+      "id": "1e6c6b37-4ffe-4de5-9e47-a95275b08b09",
+      "name": "Slack No Leads",
+      "credentials": {
+        "slackApi": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Slack account-PERSONAL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 21
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        0,
+        220
+      ],
+      "id": "e9444510-7c76-44f9-8a5a-e00bf593b896",
+      "name": "Daily Schedule - 9PM"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Read Qualified Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Qualified Leads": {
+      "main": [
+        [
+          {
+            "node": "Prepare Leads List",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Leads List": {
+      "main": [
+        [
+          {
+            "node": "Any Leads?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Any Leads?": {
+      "main": [
+        [
+          {
+            "node": "Slack No Leads",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Split Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Leads": {
+      "main": [
+        [
+          {
+            "node": "Loop One by One",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop One by One": {
+      "main": [
+        [
+          {
+            "node": "Prepare Summary",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get Snov.io Token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Snov.io Token": {
+      "main": [
+        [
+          {
+            "node": "Start Domain Search",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start Domain Search": {
+      "main": [
+        [
+          {
+            "node": "Wait 5s",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 5s": {
+      "main": [
+        [
+          {
+            "node": "Get Domain Info",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Domain Info": {
+      "main": [
+        [
+          {
+            "node": "Start Domain Emails",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start Domain Emails": {
+      "main": [
+        [
+          {
+            "node": "Wait 5s for Emails",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 5s for Emails": {
+      "main": [
+        [
+          {
+            "node": "Get Domain Emails",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Domain Emails": {
+      "main": [
+        [
+          {
+            "node": "Start Prospects Search",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start Prospects Search": {
+      "main": [
+        [
+          {
+            "node": "Wait 5s for Prospects",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 5s for Prospects": {
+      "main": [
+        [
+          {
+            "node": "Get Prospects",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Prospects": {
+      "main": [
+        [
+          {
+            "node": "Cross-Reference & Pick Best",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cross-Reference & Pick Best": {
+      "main": [
+        [
+          {
+            "node": "Email Found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email Found?": {
+      "main": [
+        [
+          {
+            "node": "Update Lead in Notion",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Update Lead in Notion Not Found",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Lead in Notion": {
+      "main": [
+        [
+          {
+            "node": "Loop Back",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Lead in Notion Not Found": {
+      "main": [
+        [
+          {
+            "node": "Loop Back",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Back": {
+      "main": [
+        [
+          {
+            "node": "Loop One by One",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Summary": {
+      "main": [
+        [
+          {
+            "node": "Slack Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Daily Schedule - 9PM": {
+      "main": [
+        [
+          {
+            "node": "Read Qualified Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false,
+    "timeSavedMode": "fixed",
+    "errorWorkflow": "GD1hZJmfeqPB6b5J",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "meta": {
+    "instanceId": "89282cf319585d0a7a52670a5b93095ddc119ae917543dc2b718c88da03e0ac1"
+  },
+  "tags": [
+    {
+      "updatedAt": "2026-06-06T08:53:21.710Z",
+      "createdAt": "2026-06-06T08:53:21.710Z",
+      "id": "9yiUjPam0oBpuHFY",
+      "name": "Notion"
+    },
+    {
+      "updatedAt": "2026-06-06T08:53:12.274Z",
+      "createdAt": "2026-06-06T08:53:12.274Z",
+      "id": "DvSFBji689V1JZU5",
+      "name": "Snov.io"
+    }
+  ]
+}
